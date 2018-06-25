@@ -103,6 +103,10 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+# Eclipse Workspace
+.project
+.pydevproject
+
 # Discord-Environment
-key.py
+TOKEN_SECRET.py
 server_data

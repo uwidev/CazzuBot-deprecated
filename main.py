@@ -1,12 +1,12 @@
 import discord
 from discord.ext import commands
-
+import TOKEN_SECRET
 import traceback
 
 # Add bot here: https://discordapp.com/oauth2/authorize?client_id=427583823912501248&scope=bot
 
 def get_prefix(bot, msg):
-    pre = ['d!']  
+    pre = ['c!']  
     return pre
 
 description = '''Bot is in very early development for the Friends server.'''
@@ -38,4 +38,4 @@ if __name__ == '__main__':
         else:
             bot.super = False
 
-bot.run('NDI3NTgzODIzOTEyNTAxMjQ4.DZmp-g.cbCEz6WIXca5QRjeDV1hqqPKYR4', reconnect=True)
+bot.run(TOKEN_SECRET.TOKEN_SECRET)

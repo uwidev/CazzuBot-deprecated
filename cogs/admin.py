@@ -7,7 +7,8 @@ from asyncio import sleep
 class AdminCog():
     def __init__(self, bot):
         self.bot = bot
-    
+
+'''    
     async def __local_check(self, ctx):
         return ctx.guild is not None and ctx.author.guild_permissions.administrator
     
@@ -198,7 +199,7 @@ class AdminCog():
                 await ctx.send(':trumpet: Channel {} has been removed from the automated votings list.'.format(channel.mention))
                 return
         await ctx.send(':exclamation: Channel {} is already not on the current automated votings.'.format(channel))
-        
+'''
         
 def setup(bot):
     bot.add_cog(AdminCog(bot))
