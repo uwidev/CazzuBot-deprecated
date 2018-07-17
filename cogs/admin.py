@@ -8,7 +8,6 @@ class AdminCog():
     def __init__(self, bot):
         self.bot = bot
 
-'''    
     async def __local_check(self, ctx):
         return ctx.guild is not None and ctx.author.guild_permissions.administrator
     
@@ -43,7 +42,7 @@ class AdminCog():
   
         root = ET.Element('data')
         
-        ET.SubElement(root, 'userauth', Status='Disabled', AuthRoleID='None', Secret='None')
+        ET.SubElement(root, 'userauth', Status='Disabled', AuthRoleID='None', MessageID='None', Emoji='None')
         ET.SubElement(root, 'autovote', Status='Disabled')
         ET.SubElement(root, 'channelvotes')
         
@@ -72,7 +71,7 @@ class AdminCog():
         # When no arguments are given, default into showing the status of userauth
         ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         ctx.userauth = ctx.tree.find('userauth')
-        
+                
         if ctx.subcommand_passed == None:
             if ctx.userauth.get('Status') == 'Disabled':
                 await ctx.send(':x: Userauth is currently **disabled.**')
@@ -82,8 +81,8 @@ class AdminCog():
                     role = discord.utils.get(ctx.guild.roles, id=int(ctx.userauth.get('AuthRoleID')))
                 except:
                     role = 'None'
-                await ctx.send(':thumbsup: Userauth is currently **enabled**.\nSecret: **{}**\nRole: **{}**'.format(ctx.userauth.get('Secret'), role))
-
+                finally:
+                    await ctx.send(':thumbsup: userauth has been enabled with the following settings:\nMessageID: **{}**\nEmoji: **{}**\nRole: **{}**\n\nPlease be sure to set these configs with `d!userauth set <message_id> <emoji>` and `d!userauth role <role>`.'.format(ctx.userauth.get('MessageID'), self.bot.get_emoji(int(ctx.userauth.get('Emoji'))), role))
     
     @userAuth.command(name='status')
     async def userAuthStatus(self, ctx, status: str):
@@ -94,23 +93,17 @@ class AdminCog():
                 role = discord.utils.get(ctx.guild.roles, id=int(ctx.userauth.get('AuthRoleID')))
             except:
                 role = 'None'
-            await ctx.send(':thumbsup: userauth has been enabled with the following settings:\nSecret: **{}**\nRole: **{}**\n\nPlease be sure to set these configs with `d!userauth secret <secret>` and `d!userauth role <role>`.'.format(ctx.userauth.get('Secret'), role))
+            finally:
+                await ctx.send(':thumbsup: userauth has been enabled with the following settings:\nMessageID: **{}**\nEmoji: **{}**\nRole: **{}**\n\nPlease be sure to set these configs with `userauth set <message_id> <emoji>` and `d!userauth role <role>`.'.format(ctx.userauth.get('MessageID'), self.bot.get_emoji(int(ctx.userauth.get('Emoji'))), role))
+        
         elif status.lower() == "disable":
             ctx.userauth.set('Status', 'Disabled')
             
             ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
             await ctx.send(':octagonal_sign: userauth has been disabled.')
             
-    
-    @userAuth.command(name='secret')
-    async def userAuthSecret(self, ctx, code: str):
-        ctx.userauth.set('Secret', code)
-        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-        
-        msg = await ctx.send(':thumbsup: Secret: **{}** has been saved.'.format(code))
-        await sleep(3)
-        await msg.delete()
-        ctx.message.delete()
+        else:
+            await ctx.send(':octagonal_sign: Must be enable or disable.')
         
         
     @userAuth.command(name='role')
@@ -119,6 +112,15 @@ class AdminCog():
         ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
         
         await ctx.send(':thumbsup: Role: **{}** has been saved.'.format(discord.utils.get(ctx.guild.roles, id=int(ctx.userauth.get('AuthRoleID')))))
+
+
+    @userAuth.command(name='set')
+    async def userAuthSet(self, ctx, msg_id, emote: discord.Emoji):
+        ctx.userauth.set('MessageID', msg_id)
+        ctx.userauth.set('Emoji', str(emote.id))
+        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
+        
+        await ctx.send(':thumbsup: Message **({})** and emoji id **({})** has been saved.'.format(ctx.userauth.get('MessageID'), ctx.userauth.get('Emoji')))
 
 
     @commands.group()
@@ -181,7 +183,6 @@ class AdminCog():
     @channelVotes.command(name='add')
     async def channelVotesAdd(self, ctx, channel: discord.TextChannel):
         if str(channel.id) in list(element.get('Channel_ID') for element in ctx.channelvotes.iter('voteon')):
-            print('already exists')                
             query = list(discord.utils.get(ctx.guild.channels, id=int(voteon.get('Channel_ID'))).mention for voteon in ctx.channelvotes.findall('voteon'))
             raise commands.BadArgument('{} already exists in the channel lists.\n\n'.format(channel.mention) + 'Channels set for automated voting are:\n**' + '\n'.join(query)+'**')
         
@@ -199,7 +200,7 @@ class AdminCog():
                 await ctx.send(':trumpet: Channel {} has been removed from the automated votings list.'.format(channel.mention))
                 return
         await ctx.send(':exclamation: Channel {} is already not on the current automated votings.'.format(channel))
-'''
+
         
 def setup(bot):
     bot.add_cog(AdminCog(bot))
