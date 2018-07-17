@@ -30,6 +30,13 @@ class MemberCog():
         await ctx.send(msg)
 
     # Potential idea: repeatd command
+
+    @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    @commands.guild_only()
+    async def repeatd(self, ctx, *, msg:str):       
+        await ctx.message.delete()
+        await ctx.send(msg)
         
     @commands.command()
     @commands.cooldown(1, 3, commands.BucketType.user)
@@ -53,7 +60,7 @@ class MemberCog():
         await ctx.send('You tried to add a role :cirnoWow:')
     
     @selfrole.command()
-    async def delete(self, ctx, msg):
+    async def remove(self, ctx, msg):
         await ctx.send('You tried to remove a role :cirnoWow:')
     
     ''' SNIPPY SNIP '''
