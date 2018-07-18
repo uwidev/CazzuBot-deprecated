@@ -3,13 +3,17 @@ from discord.ext import commands
 import xml.etree.ElementTree as ET
 from asyncio import sleep
 
-
 class AdminCog():
+
+    # Static variable
+    #emotes_to_define = ['cirnoWow', 'cirnoBaka', 'cirnoNoWork']
+    
     def __init__(self, bot):
         self.bot = bot
 
+    # Checks to see if user is an admin
     async def __local_check(self, ctx):
-        return ctx.guild is not None and ctx.author.guild_permissions.administrator
+        return ctx.guild is not None and (ctx.author.guild_permissions.administrator or ctx.author.id == self.bot.owner_id)
     
     
     async def __error(self, ctx, error):
@@ -45,6 +49,23 @@ class AdminCog():
         ET.SubElement(root, 'userauth', Status='Disabled', AuthRoleID='None', MessageID='None', Emoji='None')
         ET.SubElement(root, 'autovote', Status='Disabled')
         ET.SubElement(root, 'channelvotes')
+        ET.SubElement(root, 'selfroles')
+
+        #emotes_defined = [None for _ in
+        #consider eval/exec commands
+        cirnoWow = None
+        cirnoBaka = None
+        cirnoNoWork = None
+        
+        for emoji in self.bot.emojis:
+            if emoji.name == 'cirnoWow':
+                cirnoWow = emoji.id
+            elif emoji.name == 'cirnoBaka':
+                cirnoBaka = emoji.id
+            elif emoji.name == 'cirnoNoWork':
+                cirnoNoWork = emoji.id
+            
+        ET.SubElement(root, 'command_emojis', Wow=str(cirnoWow), Baka=str(cirnoBaka), NoWork=str(cirnoNoWork))
         
         ctx.tree = ET.ElementTree(root)
         ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
@@ -200,6 +221,27 @@ class AdminCog():
                 await ctx.send(':trumpet: Channel {} has been removed from the automated votings list.'.format(channel.mention))
                 return
         await ctx.send(':exclamation: Channel {} is already not on the current automated votings.'.format(channel))
+        
+
+    @commands.group()
+    async def selfrole(self, ctx):
+        if ctx.invoked_subcommand is None:
+            await ctx.send('Invalid command :cirnoBaka:')
+            
+    
+    @selfrole.command()
+    async def add(self, ctx, emote:str, *, msg:str):
+        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+        s_rolelist = tree.find('selfroles')
+        if(s_rolelist == None):
+            raise commands.CommandInvokeError("Role list has not been initialized")
+            
+    
+    @selfrole.command()
+    async def remove(self, ctx, emote:str, *, msg:str):
+        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+        emojis = tree.find('command_emojis')
+        await ctx.send('You tried to remove a role {}'.format(self.bot.get_emoji(int(emojis.get('Wow')))))
 
         
 def setup(bot):
