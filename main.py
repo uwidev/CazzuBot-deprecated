@@ -19,7 +19,7 @@ def get_prefix(bot, msg):
     return pre
 
 description = '''Bot is in very early development for the Friends server.'''
-bot = commands.Bot(command_prefix=get_prefix, description=description, self_bot = False, owner_id = 212797661412065281, case_insensitive=True)
+bot = commands.Bot(command_prefix=get_prefix, description=description, self_bot = False, owner_id = 92664421553307648, case_insensitive=True)
 
 # Core -------------------
 @bot.event
