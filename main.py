@@ -11,7 +11,7 @@ handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(me
 logger.addHandler(handler)
 
 
-PREFIX = ['c!']
+PREFIX = ['d!']
 # Add bot here: https://discordapp.com/oauth2/authorize?client_id=427583823912501248&scope=bot
 
 def get_prefix(bot, msg):
@@ -25,7 +25,7 @@ bot = commands.Bot(command_prefix=get_prefix, description=description, self_bot 
 @bot.event
 async def on_ready():
     print('Bot has initialized...')
-    print(f'Logged in as {bot.user.name} ({bot.user.id})')
+    print('Logged in as {} ({})'.format(bot.user.name, bot.user.id))
     print('-------------------------')    
     print('READY!')
     print('-------------------------')
@@ -46,5 +46,6 @@ if __name__ == '__main__':
             bot.super = True
         else:
             bot.super = False
+    
 
 bot.run(TOKEN_SECRET.TOKEN_SECRET)
