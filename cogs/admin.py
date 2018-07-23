@@ -26,57 +26,67 @@ class AdminCog():
                 await ctx.channel.send(':hand_splayed: Command has a {} second cooldown. Please try again after {} seconds.'.format(str(error.cooldown.per)[0:3], str(error.retry_after)[0:3]))
 
         elif isinstance(error, commands.CommandInvokeError):
-            return await ctx.send('{}'.format(error.original))
-
+            await ctx.send('{}'.format(error.original))
+             
         elif isinstance(error, commands.BadArgument):
-            return await ctx.send(':x: ERROR: {}'.format(' '.join(error.args)))
-
+            await ctx.send(':x: ERROR: {}'.format(' '.join(error.args)))
+             
         elif isinstance(error, commands.MissingRequiredArgument):
-            return await ctx.send(':x: ERROR: {} is a required argument.'.format(error.param.name))
-
-
+            await ctx.send(':x: ERROR: {} is a required argument.'.format(error.param.name))
+             
         print('Ignoring exception in command {}:'.format(ctx.command), file=sys.stderr)
         traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
-
-
-    @commands.command()
-    async def username(self, ctx, *, name:str):
-        await self.bot.user.edit(username=name)
-        await ctx.send("Username changed to {}".format(name))
-
-
+     
+     
+    async def status(self, ctx, v):
+        class sta():
+            def __init__(self, s):
+                self.id = s
+                self.name = s
+        
+        return sta(v) if v.lower() in ['enabled', 'disabled'] else False
+        
+    
+    async def role(self, ctx, v):
+        r = await commands.RoleConverter().convert(ctx, v)
+        return r
+    
+        
+    async def message(self, ctx, v):
+        msg = await ctx.get_message(int(v))
+        return msg
+        
+    
+    async def emoji(self, ctx, v):
+        e = await commands.EmojiConverter().convert(ctx, v)
+        return e
+        
+        
+    '''
+    Write message and status as converters
+    '''
+    
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def init(self, ctx):
         if not os.path.isdir('server_data/{}'.format(ctx.guild.id)):
             os.makedirs('server_data/{}'.format(str(ctx.guild.id)))
 
-        root = ET.Element('data')
-
-        ET.SubElement(root, 'userauth', Status='Disabled', AuthRoleID='None', MessageID='None', Emoji='None')
-        ET.SubElement(root, 'autovote', Status='Disabled')
-        ET.SubElement(root, 'channelvotes')
-        ET.SubElement(root, 'selfroles')
-        selfroles = root.find('selfroles')
-        ET.SubElement(selfroles, 'msg_id', Value='-42')
-        ET.SubElement(selfroles, 'ch_id', Value='-42')
-
-        #emotes_defined = [None for _ in
-        #consider eval/exec commands
-        cirnoWow = None
-        cirnoBaka = None
-        cirnoNoWork = None
-
-        for emoji in self.bot.emojis:
-            if emoji.name == 'cirnoWow':
-                cirnoWow = emoji.id
-            elif emoji.name == 'cirnoBaka':
-                cirnoBaka = emoji.id
-            elif emoji.name == 'cirnoNoWork':
-                cirnoNoWork = emoji.id
-
-        ET.SubElement(root, 'command_emojis', Wow=str(cirnoWow), Baka=str(cirnoBaka), NoWork=str(cirnoNoWork))
-
+        root = ET.Element('data')        
+        userauth = ET.SubElement(root, 'userauth')
+        
+        auth_status = ET.SubElement(userauth, 'status')
+        auth_status.text = 'disabled'
+        
+        auth_authRole = ET.SubElement(userauth, 'role')
+        auth_authRole.text = 'Not yet set'
+        
+        auth_message = ET.SubElement(userauth, 'message')
+        auth_message.text = 'Not yet set'
+        
+        auth_emoji = ET.SubElement(userauth, 'emoji')
+        auth_emoji.text = 'Not yet set'
+        
         ctx.tree = ET.ElementTree(root)
         ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
 
@@ -85,7 +95,6 @@ class AdminCog():
 
     @init.before_invoke
     async def initVerify(self, ctx):
-
         def verification(m):
             return m.author == ctx.author and m.content.lower() in ['yes', 'no']
 
@@ -95,6 +104,46 @@ class AdminCog():
         if reply.content.lower() == 'no':
             raise commands.CommandInvokeError(':octagonal_sign: Initialization has been cancelled.')
 
+
+    @commands.command()
+    async def configs(self, ctx):        
+        root = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id)).getroot()
+        msg = ''
+        dis = '    {0}: {1}\n'
+        
+        for E in root:
+            msg += '**{}**\n'.format(E.tag)
+            for e in E:
+                cvalue = await eval('self.{0}(ctx, "{1}")'.format(e.tag, e.text))
+                if e.tag in ['role']:
+                    msg += dis.format(e.tag, cvalue.name)
+                elif e.tag in ['emoji']:
+                    msg += dis.format(e.tag, cvalue)
+                elif e.tag in ['status', 'message']:
+                    msg += dis.format(e.tag, cvalue.id)                
+            msg += '\n'
+        await ctx.send(msg)
+        
+        
+    @commands.group()
+    async def edit(self, ctx, group, setting, *value):        
+        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+        root = tree.getroot()
+        
+        if group.lower() in (element.tag for element in root):
+            E = root.find(group)
+            e = E.find(setting)
+            
+            val =  ' '.join(value)
+            obj = await eval('self.{}(ctx, val)'.format(setting))
+            print(type(obj), obj)
+            if obj.id:
+                
+                e.text = str(obj.id)
+
+            tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
+    
+     
 
     @commands.group()
     @commands.cooldown(1, 2, commands.BucketType.guild)
@@ -113,8 +162,9 @@ class AdminCog():
                 except:
                     role = 'None'
                 finally:
-                    await ctx.send(':thumbsup: userauth has been enabled with the following settings:\nMessageID: **{}**\nEmoji: **{}**\nRole: **{}**\n\nPlease be sure to set these configs with `d!userauth set <message_id> <emoji>` and `d!userauth role <role>`.'.format(ctx.userauth.get('MessageID'), self.bot.get_emoji(int(ctx.userauth.get('Emoji'))), role))
+                    await ctx.send(':thumbsup: User Authentication has been enabled')
 
+                    
     @userAuth.command(name='status')
     async def userAuthStatus(self, ctx, status: str):
         if status.lower() == 'enable':
@@ -125,8 +175,7 @@ class AdminCog():
             except:
                 role = 'None'
             finally:
-                await ctx.send(':thumbsup: userauth has been enabled with the following settings:\nMessageID: **{}**\nEmoji: **{}**\nRole: **{}**\n\nPlease be sure to set these configs with `userauth set <message_id> <emoji>` and `d!userauth role <role>`.'.format(ctx.userauth.get('MessageID'), self.bot.get_emoji(int(ctx.userauth.get('Emoji'))), role))
-
+                await ctx.send(':thumbsup: userauth has been enabled with the following settings:\nMessageID: **{}**\nEmoji: **{}**\nRole: **{}**\n\nPlease be sure to set these configs with `userauth set <message_id> <emoji>` and `d!userauth role <role>`.'.format(ctx.userauth.get('MessageID'), self.bot.get_emoji(int(ctx.userauth.get('EmojiID'))), role))
         elif status.lower() == "disable":
             ctx.userauth.set('Status', 'Disabled')
 

@@ -25,6 +25,11 @@ class AutomationsCog():
         selfroles_msg_id = int(s_rolelist.find('msg_id').get('Value'))
         selfroles_roles_ch = int(s_rolelist.find('ch_id').get('Value'))
         guild = self.bot.get_guild(payload.guild_id)
+        
+        if payload.message_id == int(userauth.get('MessageID')) and payload.emoji.id == int(userauth.get('Emoji')) and userauth.get('Status') == 'Enabled':
+            #await self.bot.get_channel(payload.channel_id).send('Success!')
+            await guild.get_member(payload.user_id).add_roles(discord.utils.get(guild.roles, id = int(userauth.get('AuthRoleID'))))
+            
         if payload.message_id == selfroles_msg_id and payload.channel_id == selfroles_roles_ch:  # and s_rolelist.get('Status') == 'Enabled':
             for e in s_rolelist.iter():
                 if(payload.emoji.name == e.tag):
@@ -61,11 +66,7 @@ class AutomationsCog():
                 await message.add_reaction('\U0001f44e')
                 await message.add_reaction('\U0001f914')
 '''
-        
-    
-        
-        
-        
+             
 
 def setup(bot):
     bot.add_cog(AutomationsCog(bot))

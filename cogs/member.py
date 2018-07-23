@@ -17,7 +17,7 @@ class MemberCog():
             else:
                 await ctx.channel.send(':hand_splayed: Please try again after {} seconds.'.format(str(error.retry_after)[0:3]))
     '''
-    
+
     @commands.command()
     @commands.cooldown(1, 3, commands.BucketType.user)
     @commands.guild_only()
@@ -65,6 +65,7 @@ class MemberCog():
     async def noot(self, ctx):
         await ctx.send("NOOT NOOT")
     
+
 
 def setup(bot):
     bot.add_cog(MemberCog(bot))
