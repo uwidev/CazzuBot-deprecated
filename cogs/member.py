@@ -64,6 +64,12 @@ class MemberCog():
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         emojis = tree.find('command_emojis')
         await ctx.send("{} ︵ ┻━┻".format(self.bot.get_emoji(int(emojis.get('NoWork')))))
+
+
+    @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    async def noot(self, ctx):
+        await ctx.send("NOOT NOOT")
     
 
 def setup(bot):
