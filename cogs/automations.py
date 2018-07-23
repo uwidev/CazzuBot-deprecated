@@ -22,9 +22,10 @@ class AutomationsCog():
 
         # automated user self-roles
         s_rolelist = tree.find('selfroles')
+        selfroles_msg_id = int(s_rolelist.find('msg_id').get('Value'))
+        selfroles_roles_ch = int(s_rolelist.find('ch_id').get('Value'))
         guild = self.bot.get_guild(payload.guild_id)
-        if payload.message_id == 470366077071785994: # and s_rolelist.get('Status') == 'Enabled':
-            # await self.bot.get_channel(payload.channel_id).send('Success!')
+        if payload.message_id == selfroles_msg_id and payload.channel_id == selfroles_roles_ch:  # and s_rolelist.get('Status') == 'Enabled':
             for e in s_rolelist.iter():
                 if(payload.emoji.name == e.tag):
                     await guild.get_member(payload.user_id).add_roles(
@@ -36,9 +37,10 @@ class AutomationsCog():
 
         # automated user self-roles
         s_rolelist = tree.find('selfroles')
+        selfroles_msg_id = int(s_rolelist.find('msg_id').get('Value'))
+        selfroles_roles_ch = int(s_rolelist.find('ch_id').get('Value'))
         guild = self.bot.get_guild(payload.guild_id)
-        if payload.message_id == 470366077071785994:  # and s_rolelist.get('Status') == 'Enabled':
-            # await self.bot.get_channel(payload.channel_id).send('Success!')
+        if payload.message_id == selfroles_msg_id and payload.channel_id == selfroles_roles_ch:  # and s_rolelist.get('Status') == 'Enabled':
             for e in s_rolelist.iter():
                 if (payload.emoji.name == e.tag):
                     await guild.get_member(payload.user_id).remove_roles(
