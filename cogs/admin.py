@@ -40,6 +40,12 @@ class AdminCog():
 
 
     @commands.command()
+    async def username(self, ctx, *, name:str):
+        await self.bot.user.edit(username=name)
+        await ctx.send("Username changed to {}".format(name))
+
+
+    @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def init(self, ctx):
         if not os.path.isdir('server_data/{}'.format(ctx.guild.id)):

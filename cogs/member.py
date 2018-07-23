@@ -44,12 +44,6 @@ class MemberCog():
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def add(self, ctx, left: int, right: int):
         await ctx.send( left + right )
-    
-        
-    @commands.command()
-    async def username(self, ctx, *, name:str):
-        await self.bot.user.edit(username=name)
-        await ctx.send("Username changed to {}".format(name))
 
 
     @commands.command()
