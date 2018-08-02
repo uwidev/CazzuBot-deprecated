@@ -88,8 +88,26 @@ class AdminCog():
         auth_emoji.text = 'Not yet set'
         
         ctx.tree = ET.ElementTree(root)
-        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
+        
+        selfroles = ET.SubElement(root, 'selfroles')
+        ET.SubElement(selfroles, 'msg_id', Value='-42')
+        ET.SubElement(selfroles, 'ch_id', Value='-42')
+        #emotes_defined = [None for _ in
+        #consider eval/exec commands
+        cirnoWow = None
+        cirnoBaka = None
+        cirnoNoWork = None
+        for emoji in self.bot.emojis:
+            if emoji.name == 'cirnoWow':
+                cirnoWow = emoji.id
+            elif emoji.name == 'cirnoBaka':
+                cirnoBaka = emoji.id
+            elif emoji.name == 'cirnoNoWork':
+                cirnoNoWork = emoji.id
+        ET.SubElement(root, 'command_emojis', Wow=str(cirnoWow), Baka=str(cirnoBaka), NoWork=str(cirnoNoWork))
 
+
+        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
         await ctx.send(':thumbsup: **{}** (`{}`) server config have been initialized.'.format(ctx.guild.name, ctx.guild.id))
 
 
