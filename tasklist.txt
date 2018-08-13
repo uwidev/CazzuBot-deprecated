@@ -1,0 +1,14 @@
+High:
+	(Done)	Functionality for message edits (heavy speed optimization)
+			Sorting commands (faster reordering)
+
+Medium:
+			Change custom emoji storage to just ID
+	(Done)	make the bot not assign itself roles
+			Selfroles message embeds (aesthetic purposes)
+(Unsure)	Backup command (to save server configs)
+
+Low:
+			General command speed optimization (see ideas.txt)
+	(Done)	Make command "selfrole group del" grammatically consistent for groups with 1 role
+			Change _build_message channel_id parameter to a channel object

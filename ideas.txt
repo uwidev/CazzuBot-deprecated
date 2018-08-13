@@ -1,0 +1,10 @@
+Reminder: if you find yourself copy-pasting code, think about making a *smaller* helper function that does the same thing.
+
+Multiple selfroles messages:
+	Message id list:
+		Store as numbers in list form, but also store as attribute of corresponding group
+		Example: <group name="test1" msg_id="-42">
+
+General command speed optimization:
+	Store data as attribute of the bot (Important: test if that data carries over between cogs first)
+	Have a text file with a small amount of data indicating whether the main file has been changed or not
