@@ -2,8 +2,7 @@ import discord, os, traceback, sys
 from discord.ext import commands
 import xml.etree.ElementTree as ET
 from asyncio import sleep
-from discord import PartialEmoji
-from discord import Emoji
+import emoji as emoji_module
 
 class AdminCog():
 
@@ -723,6 +722,13 @@ class AdminCog():
             assoc_list.extend(group.findall('assoc'))
 
         return assoc_list
+
+
+    @commands.command()
+    async def isEmoji(self, ctx, *, emoji: str):
+        d = emoji_module.demojize(emoji)
+        await ctx.send(d)
+        await ctx.send(str(d != emoji) + "!")
 
 
 def setup(bot):
