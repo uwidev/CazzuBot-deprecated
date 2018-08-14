@@ -180,7 +180,8 @@ class AdminCog():
                 except:
                     role = 'None'
                 finally:
-                    await ctx.send(':thumbsup: User Authentication has been enabled')
+                    await ctx.send(':thumbsup: userauth has been enabled with the following settings:\nMessageID: **{}**\nEmoji: **{}**\nRole: **{}**\n\nPlease be sure to set these configs with `userauth set <message_id> <emoji>` and `d!userauth role <role>`.'.format(ctx.userauth.get('MessageID'), self.bot.get_emoji(int(ctx.userauth.get('Emoji'))), role))
+
 
                     
     @userAuth.command(name='status')
@@ -191,9 +192,9 @@ class AdminCog():
             try:
                 role = discord.utils.get(ctx.guild.roles, id=int(ctx.userauth.get('AuthRoleID')))
             except:
-                role = 'None'
+                role = 'Not yet set'
             finally:
-                await ctx.send(':thumbsup: userauth has been enabled with the following settings:\nMessageID: **{}**\nEmoji: **{}**\nRole: **{}**\n\nPlease be sure to set these configs with `userauth set <message_id> <emoji>` and `d!userauth role <role>`.'.format(ctx.userauth.get('MessageID'), self.bot.get_emoji(int(ctx.userauth.get('EmojiID'))), role))
+                await ctx.send(':thumbsup: userauth has been enabled with the following settings:\nMessageID: **{}**\nEmoji: **{}**\nRole: **{}**\n\nPlease be sure to set these configs with `userauth set <message_id> <emoji>` and `d!userauth role <role>`.'.format(ctx.userauth.get('MessageID'), self.bot.get_emoji(int(ctx.userauth.get('Emoji'))), role))
         elif status.lower() == "disable":
             ctx.userauth.set('Status', 'Disabled')
 
@@ -219,85 +220,6 @@ class AdminCog():
         ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
 
         await ctx.send(':thumbsup: Message **({})** and emoji id **({})** has been saved.'.format(ctx.userauth.get('MessageID'), ctx.userauth.get('Emoji')))
-
-
-    @commands.group()
-    async def channelVotes(self, ctx):
-        ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        ctx.channelvotes = ctx.tree.find('channelvotes')
-
-        if ctx.subcommand_passed == None:
-            message = ''
-            if ctx.channelvotes.get('Status') == 'Enabled':
-                message += ':thumbsup: Automated Channel Votings are currently enabled.'
-
-            else:
-                message += ':octagonal_sign: Automated Channel Votings are currently disabled.'
-
-            query = list(discord.utils.get(ctx.guild.channels, id=int(voteon.get('Channel_ID'))).mention for voteon in ctx.channelvotes.findall('voteon'))
-            if len(query) == 0:
-                message += '\n\nNo channels are currently set up for automated voting.'
-            else:
-                message += '\n\nChannels set for automated voting are:\n**' + '\n'.join(query)+'**'
-
-            await ctx.send(message)
-
-
-    @channelVotes.command(name='status')
-    async def channelVotesStatus(self, ctx, status=''):
-        if status.lower() == 'enable':
-            ctx.channelvotes.set('Status', 'Enabled')
-            ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-
-            query = list(discord.utils.get(ctx.guild.channels, id=int(voteon.get('Channel_ID'))).mention for voteon in ctx.channelvotes.findall('voteon'))
-            if len(query) == 0:
-                await ctx.send(':thumbsup: Userauth is currently **enabled**.\nNo channels are currently set up for automated voting.')
-            else:
-                await ctx.send(':thumbsup: Userauth is currently **enabled**.\nChannels set for automated voting are:\n**' + '\n'.join(query)+'**')
-
-        elif status.lower() == "disable":
-            ctx.channelvotes.set('Status', 'Disabled')
-
-            ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-            await ctx.send(':octagonal_sign: Automated channel votings has been disabled.')
-
-        else:
-            message = ''
-            if ctx.channelvotes.get('Status') == 'Enabled':
-                message += ':thumbsup: Automated Channel Votings are currently enabled.'
-
-            else:
-                message += ':octagonal_sign: Automated Channel Votings are currently disabled.'
-
-            query = list(discord.utils.get(ctx.guild.channels, id=int(voteon.get('Channel_ID'))).mention for voteon in ctx.channelvotes.findall('voteon'))
-            if len(query) == 0:
-                message += '\n\nNo channels are currently set up for automated voting.'
-            elif status == '':
-                message += '\n\nChannels set for automated voting are:\n**' + '\n'.join(query)+'**'
-
-            await ctx.send(message)
-
-
-    @channelVotes.command(name='add')
-    async def channelVotesAdd(self, ctx, channel: discord.TextChannel):
-        if str(channel.id) in list(element.get('Channel_ID') for element in ctx.channelvotes.iter('voteon')):
-            query = list(discord.utils.get(ctx.guild.channels, id=int(voteon.get('Channel_ID'))).mention for voteon in ctx.channelvotes.findall('voteon'))
-            raise commands.BadArgument('{} already exists in the channel lists.\n\n'.format(channel.mention) + 'Channels set for automated voting are:\n**' + '\n'.join(query)+'**')
-
-        ET.SubElement(ctx.channelvotes, 'voteon', Channel_ID='{}'.format(channel.id))
-        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-        await ctx.send(':trumpet: Channel {} has been added to the automated votings list.'.format(channel.mention))
-
-
-    @channelVotes.command(name='remove', aliases= ['rm', 'delete', 'del'])
-    async def channelVotesRemove(self, ctx, channel: discord.TextChannel):
-        for element in ctx.channelvotes.iter('voteon'):
-            if discord.utils.get(ctx.guild.channels, id=int(element.get('Channel_ID'))) == channel:
-                ctx.channelvotes.remove(element)
-                ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-                await ctx.send(':trumpet: Channel {} has been removed from the automated votings list.'.format(channel.mention))
-                return
-        await ctx.send(':exclamation: Channel {} is already not on the current automated votings.'.format(channel))
 
 
     @commands.group()
