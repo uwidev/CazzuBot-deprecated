@@ -18,6 +18,8 @@ class MemberCog():
                 await ctx.channel.send(':hand_splayed: Please try again after {} seconds.'.format(str(error.retry_after)[0:3]))
     '''
 
+    
+
     @commands.command()
     @commands.cooldown(1, 3, commands.BucketType.user)
     @commands.guild_only()
