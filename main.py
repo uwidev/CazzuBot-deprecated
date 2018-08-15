@@ -30,7 +30,7 @@ async def on_ready():
     print('READY!')
     print('-------------------------')
     
-extensions = ['cogs.member', 'cogs.admin', 'cogs.dev', 'cogs.automations']
+extensions = ['cogs.member', 'cogs.admin', 'cogs.dev', 'cogs.automations', 'cogs.testing']
 
 if __name__ == '__main__':
     for ext in extensions:

@@ -567,16 +567,18 @@ class AdminCog():
             await ctx.send(":bomb: Existing selfroles message has been destroyed")
 
 
-    async def _build_message(self, ctx, target_channel_id: int, suppress_output = False):
+    async def _build_message(self, ctx, target_channel: discord.TextChannel, suppress_output = False):
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
         associations = selfrole_list.find('associations')
         selfroles_ch_id = int(selfrole_list.find('ch_id').text)
-
+        '''
         if target_channel_id == -21:
             channel_id = ctx.channel.id
         else:
             channel_id = target_channel_id
+        '''
+        channel_id = target_channel.id
 
         if selfroles_ch_id != -42:
             await self._sg_del(ctx, suppress_output)
@@ -610,31 +612,22 @@ class AdminCog():
 
 
     @selfrole.group(name='mkmsg')
-    async def selfroleCreate(self, ctx, target_channel_name: discord.TextChannel, suppress_output = 'default'):
+    async def selfroleMsgCreate(self, ctx, target_channel: discord.TextChannel = None, suppress_output = 'default'):
         """
         Creates a selfrole assignment message in the target channel if specified, or the current channel by default.
 
         If suppress_output is set to 'true', will not print out any confirmation messages. This is usually set to false
         by default, unless the target channel is the current channel.
         """
-        '''
-        if len(target_channel_name) > 0 and target_channel_name[:2] == '<#' and target_channel_name[-1] == '>':
-            target_channel_id = int(target_channel_name[2:-1])
-            if not discord.utils.get(ctx.guild.channels, id=target_channel_id):
-                raise commands.CommandInvokeError("Error: Channel does not exist.")
-        else:
-            try:
-                target_channel_id = -21 if target_channel_name == "" else discord.utils.get(ctx.guild.channels,
-                                                                                            name=target_channel_name).id
-            except AttributeError:
-                raise commands.CommandInvokeError("Error: Channel does not exist.")
-        '''
+        if target_channel == None:
+            target_channel = ctx.message.channel
+        target_channel_id = target_channel.id
         if suppress_output in ['true', 'false']:
             s = suppress_output == 'true'
         else:  # Default behavior
-            s = target_channel_id == -21 or ctx.message.channel.id == target_channel_id
-        target_channel_id = target_channel_name.id
-        await self._build_message(ctx, target_channel_id, s)
+            s = ctx.message.channel.id == target_channel.id
+
+        await self._build_message(ctx, target_channel, s)
 
 
     @selfrole.command(name='delmsg')
@@ -725,10 +718,8 @@ class AdminCog():
 
 
     @commands.command()
-    async def isEmoji(self, ctx, *, emoji: str):
-        d = emoji_module.demojize(emoji)
-        await ctx.send(d)
-        await ctx.send(str(d != emoji) + "!")
+    async def test2(self, ctx):
+        await ctx.send(u"\U0001F1E6")
 
 
 def setup(bot):
