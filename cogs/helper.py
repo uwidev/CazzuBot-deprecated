@@ -35,11 +35,11 @@ class HelperCog():
             u'\U0001F1FF': u':regional_indicator_z:'
             }
         
-        emoji.UNICODE_EMOJI.update(regional_emoji)
+        emoji.UNICODE_EMOJI_ALIAS.update(regional_emoji)
   
     class AllEmoji(commands.EmojiConverter):
         async def convert(self, ctx, argument):
-            if argument in emoji.UNICODE_EMOJI or argument in emoji.UNICODE_EMOJI_ALIAS:
+            if argument in emoji.UNICODE_EMOJI_ALIAS:
                 return argument
             return await super().convert(ctx, argument)
 
