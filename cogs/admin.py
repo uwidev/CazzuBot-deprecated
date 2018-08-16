@@ -2,7 +2,9 @@ import discord, os, traceback, sys
 from discord.ext import commands
 import xml.etree.ElementTree as ET
 from asyncio import sleep
-import emoji as emoji_module
+from cogs.helper import HelperCog
+AllEmoji = HelperCog.AllEmoji
+import re
 
 class AdminCog():
 
@@ -299,53 +301,34 @@ class AdminCog():
                            "Use \"c!help selfrole role\" for a list of valid commands")
 
 
-    @selfrole.group(name="group")
+    @selfrole.group(name='group')
     async def selfroleGroup(self, ctx):
         if ctx.invoked_subcommand is None:
             await ctx.send("Invalid command usage <:cirnoBaka:469040361323364352>\n" +
                            "Use \"c!help selfrole group\" for a list of valid commands")
 
 
+    def _is_custom_emoji(self, emoji: str):
+        return bool(re.match('<:[A-Za-z0-9~\-_]+:\d+>', emoji))
+
+
     @rolesManage.command(name='add')
-    async def selfroleAdd(self, ctx, group: str, emoji: str, *, role: str):
+    async def selfroleAdd(self, ctx, group: str, emoji: AllEmoji, *, role: str):
         """
         Associates an emoji with a role for use in selfrole assignment.
-
-        Notes: default group should be set to -- in the future. (It's not right now- don't try it)
         """
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
-        if selfrole_list == None:
+        if selfrole_list is None:
             raise commands.CommandInvokeError("Role list has not been initialized")
-        
         associations = selfrole_list.find('associations')
-        if associations == None:
+        if associations is None:
             raise commands.CommandInvokeError("Please reinitialize server configs to use this command")
-
         groups = associations.findall('group')
-
         if not self._group_exists(groups, group):
             raise commands.CommandInvokeError(":x: ERROR: Group **{}** does not exist".format(group))
 
         # Requirements checking
-
-        # Check emoji existence
-        has_emoji = False
-        custom_emoji = True
-
-        if emoji[0] == '<' and emoji[-1] == '>' and ':' in emoji:
-            emoji = emoji.split(':')[1] # This is the name in the custom emoji format used by Discord
-        for e in ctx.guild.emojis:
-            if e.name == emoji:
-                has_emoji = True
-                break
-        if not has_emoji:
-            custom_emoji = False
-            try:
-                await ctx.message.add_reaction(emoji)
-                await ctx.message.remove_reaction(emoji, self.bot.user)
-            except commands.CommandInvokeError:
-                raise commands.CommandInvokeError("Emoji {} is not a valid emoji".format(emoji))
 
         # Check role existence
         has_role = False
@@ -357,13 +340,13 @@ class AdminCog():
             raise commands.CommandInvokeError("Role \"{}\" is not a valid role in the server".format(role))
 
         # Check if emoji is bound to role
-        search_string = str(discord.utils.get(ctx.guild.emojis, name=emoji)) if custom_emoji else emoji
+        is_custom = type(emoji) != str
         assoc_list = self._get_all_associations(groups)
         for element in assoc_list:
-            if element.find('emoji').text == search_string:
+            if (is_custom and element.find('emoji').text == str(emoji.id)) or element.find('emoji').text == emoji:
                 raise commands.CommandInvokeError(
                     "Error: {} is already bound to a role. Please unassign the emoji before assigning it to a different role.".format(
-                        search_string))
+                        emoji))
             if element.find('role').text == role:
                 raise commands.CommandInvokeError(
                     "Error: \"{}\" is already bound to an emoji. Please unbind the emoji and the role.".format(role))
@@ -374,14 +357,18 @@ class AdminCog():
             if g.get('name') == group:
                 group_obj = g
                 break
-        new_assoc = ET.SubElement(group_obj, 'assoc', {'custom': str(1 if custom_emoji else 0)})
+
+        new_assoc = ET.SubElement(group_obj, 'assoc', {'custom': '1' if is_custom else '0'})
         new_assoc_emoji = ET.SubElement(new_assoc, 'emoji')
-        new_assoc_emoji.text = search_string
+        if is_custom: # Custom emoji
+            new_assoc_emoji.text = str(emoji.id)
+        else: # Unicode emoji
+            new_assoc_emoji.text = emoji
         new_assoc_role = ET.SubElement(new_assoc, 'role')
         new_assoc_role.text = role
         tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-        await self.change_selfroles_msg_role(ctx, group_obj, search_string, True, custom_emoji)
-        await ctx.send("Emoji {} successfully registered with role \"{}\"".format(search_string, role))
+        await self.change_selfroles_msg_role(ctx, group_obj, emoji, True)
+        await ctx.send("Emoji {} successfully registered with role \"{}\"".format(emoji, role))
 
 
     @rolesManage.command(name='del')
@@ -424,27 +411,23 @@ class AdminCog():
             raise commands.CommandInvokeError("Error: {} is not currently bound to an emoji.".format(role))
 
         old_emoji = curr_assoc.find('emoji').text
-        is_custom = bool(int(curr_assoc.get('custom')))
+        if int(curr_assoc.get('custom')):
+            old_emoji = self.bot.get_emoji(int(old_emoji))
         group_containing_role.remove(curr_assoc)
         tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-        await self.change_selfroles_msg_role(ctx, group_containing_role, old_emoji, False, is_custom)
+        await self.change_selfroles_msg_role(ctx, group_containing_role, old_emoji, False)
         await ctx.send("Role \"{}\" successfully removed; previously bound to emoji {}".format(role, old_emoji))
 
-    async def change_selfroles_msg_role(self, ctx, group: "XML Element", emoji: str, to_add: bool, custom: bool):
+
+    async def change_selfroles_msg_role(self, ctx, group: "XML Element", emoji: AllEmoji, to_add: bool):
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
-        # ctx.selfroles_msg_id = int(s_rolelist.find('msg_id').text)
         selfroles_ch_id = int(selfrole_list.find('ch_id').text)
-        # associations = selfrole_list.find('associations')
         if selfroles_ch_id != -42:
-
-            # await self._build_message(ctx, selfroles_ch_id)
             group_msg_id = int(group.get('msg_id'))
             msg_obj = await self.bot.get_channel(selfroles_ch_id).get_message(group_msg_id)
             msg_str = await self._get_single_group_msg(group)
-            await msg_obj.edit(content = msg_str)
-            if custom:
-                emoji = self.bot.get_emoji(int(emoji.split(':')[2][:-1]))
+            await msg_obj.edit(content=msg_str)
             if to_add:
                 await msg_obj.add_reaction(emoji)
             else:
@@ -479,7 +462,10 @@ class AdminCog():
         added_element = False
         for element in group.findall('assoc'):
             added_element = True
-            msg += "\t" + str(element.find('emoji').text) + ' **:** ' + str(element.find('role').text) + '\n'
+            emoji = element.find('emoji').text
+            if int(element.get('custom')):
+                emoji = self.bot.get_emoji(int(emoji))
+            msg += "\t" + str(emoji) + ' **:** ' + str(element.find('role').text) + '\n'
         if not added_element:
             msg += "\tEmpty!"
         return msg
@@ -494,6 +480,17 @@ class AdminCog():
         return msg_list
 
 
+    async def _listing_command(self, ctx):
+        # NOTE: the message below uses a static prefix. Modify later to dynamically determine the prefix
+        msg_list = ["Registered emojis:\n\n"] + await self._get_msg_list(ctx)
+        if msg_list == ["Registered emojis:\n\n"]:
+            await ctx.send(
+                "You have not registered any groups yet! Add an group by typing c!selfrole group add <group>")
+        else:
+            for msg in msg_list:
+                await ctx.send(msg)
+
+
     @selfrole.command(name='list')
     async def selfroleList(self, ctx):
         """
@@ -501,15 +498,8 @@ class AdminCog():
 
         This command functions the same as c!selfrole role list.
         """
+        await self._listing_command(ctx)
 
-        # NOTE: the message below uses a static prefix. Modify later to dynamically determine the prefix
-        msg_list = ["Registered emojis:\n\n"] + await self._get_msg_list(ctx)
-        if msg_list == ["Registered emojis:\n\n"]:
-            await ctx.send(
-                "You have not registered any emojis yet! Add an emoji by typing c!selfrole add <emoji> <role>")
-        else:
-            for msg in msg_list:
-                await ctx.send(msg)
 
     @rolesManage.command(name='list')
     async def selfroleRoleList(self, ctx):
@@ -518,15 +508,7 @@ class AdminCog():
 
         This command functions the same as c!selfrole list.
         """
-
-        # NOTE: the message below uses a static prefix. Modify later to dynamically determine the prefix
-        msg_list = ["Registered emojis:\n\n"] + await self._get_msg_list(ctx)
-        if msg_list == ["Registered emojis:\n\n"]:
-            await ctx.send(
-                "You have not registered any emojis yet! Add an emoji by typing c!selfrole add <emoji> <role>")
-        else:
-            for msg in msg_list:
-                await ctx.send(msg)
+        await self._listing_command(ctx)
 
 
     def _conv_to_id_list(self, msg_id_text: str) -> [int]:
@@ -598,7 +580,7 @@ class AdminCog():
             for assoc in group.findall('assoc'):
                 emoji_str = assoc.find('emoji').text
                 if int(assoc.get('custom')):
-                    await msg_obj.add_reaction(self.bot.get_emoji(int(emoji_str.split(':')[2][:-1])))
+                    await msg_obj.add_reaction(self.bot.get_emoji(int(emoji_str)))
                 else:
                     await msg_obj.add_reaction(emoji_str)
 
@@ -718,8 +700,13 @@ class AdminCog():
 
 
     @commands.command()
-    async def test2(self, ctx):
-        await ctx.send(u"\U0001F1E6")
+    async def test2(self, ctx, emoji: AllEmoji):
+        await self.react(ctx, emoji)
+        await ctx.send(emoji)
+
+    async def react(self, ctx, emoji: AllEmoji):
+        print(emoji)
+        await ctx.message.add_reaction(emoji)
 
 
 def setup(bot):

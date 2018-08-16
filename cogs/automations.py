@@ -41,7 +41,7 @@ class AutomationsCog():
             for e in associations.iter():
                 if e.tag != 'assoc':
                     continue
-                if str(payload.emoji) == e.find('emoji').text:
+                if str(payload.emoji.id if int(e.get('custom')) else payload.emoji) == e.find('emoji').text:
                     await guild.get_member(payload.user_id).add_roles(
                         discord.utils.get(guild.roles, name=e.find('role').text))
                     break
@@ -61,7 +61,7 @@ class AutomationsCog():
             for e in associations.iter():
                 if e.tag != 'assoc':
                     continue
-                if str(payload.emoji) == e.find('emoji').text:
+                if str(payload.emoji.id if int(e.get('custom')) else payload.emoji) == e.find('emoji').text:
                     await guild.get_member(payload.user_id).remove_roles(
                         discord.utils.get(guild.roles, name=e.find('role').text))
                     break
