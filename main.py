@@ -12,7 +12,7 @@ logger.addHandler(handler)
 
 
 PREFIX = ['d!']
-# Add bot here: https://discordapp.com/oauth2/authorize?client_id=427583823912501248&scope=bot
+# Add bot here: https://discordapp.com/oauth2/authorize?client_id=378651742239457290&scope=bot
 
 def get_prefix(bot, msg):
     pre = PREFIX
