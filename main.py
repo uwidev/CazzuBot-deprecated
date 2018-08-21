@@ -11,6 +11,7 @@ handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(me
 logger.addHandler(handler)
 
 
+
 PREFIX = ['d!']
 # Add bot here: https://discordapp.com/oauth2/authorize?client_id=378651742239457290&scope=bot
 
@@ -26,10 +27,10 @@ bot = commands.Bot(command_prefix=get_prefix, description=description, self_bot 
 async def on_ready():
     print('Bot has initialized...')
     print('Logged in as {} ({})'.format(bot.user.name, bot.user.id))
-    print('-------------------------')    
+    print('-------------------------')
     print('READY!')
     print('-------------------------')
-    
+
 extensions = ['cogs.member', 'cogs.admin', 'cogs.dev', 'cogs.automations']
 
 if __name__ == '__main__':
@@ -39,13 +40,13 @@ if __name__ == '__main__':
         except:
             print('Failed to load extension: {}'.format(ext))
             traceback.print_exc()
-            
+
     with open('super', 'r') as readfile:
         state = readfile.read()
         if state == 'True':
             bot.super = True
         else:
             bot.super = False
-    
+
 
 bot.run(TOKEN_SECRET.TOKEN_SECRET)
