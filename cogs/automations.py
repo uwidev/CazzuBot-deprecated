@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
 import xml.etree.ElementTree as ET
+import html
+import cogs.help as help
 
 class AutomationsCog():
     def __init__(self, bot):
@@ -18,8 +20,11 @@ class AutomationsCog():
             guild = self.bot.get_guild(payload.guild_id)
 
             #await guild.get_channel(payload.channel_id).send('{} {}'.format(payload.emoji.id, xml_emoji.find('id').text))
-            if payload.message_id == int(xml_message.find('id').text) and str(payload.emoji) == xml_emoji.find('id').text:
-                await guild.get_member(payload.user_id).add_roles(discord.utils.get(guild.roles, id = int(xml_role.find('id').text)))
+            if payload.message_id == int(xml_message.find('id').text):
+                if str(payload.emoji) == html.unescape(xml_emoji.find('id').text):
+                    await guild.get_member(payload.user_id)\
+                                .add_roles(discord.utils\
+                                .get(guild.roles, id=int(xml_role.find('id').text)))
 
         except ValueError:
             print("userauth settings not properly defined")

@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 import discord
 from discord.ext import commands
 import emoji
-
+import html
 
 def emoji_regional_update():
     regional_emoji = {
@@ -37,6 +37,12 @@ def emoji_regional_update():
     emoji.UNICODE_EMOJI.update(regional_emoji)
 
 
+def check_userauth_role_set(ctx):
+    role = ctx.userauth.find('role')
+    if role.find('id').text != 'None':
+        return True
+    return False
+
 class AllEmoji(commands.EmojiConverter):
     async def convert(self, ctx, argument):
         if await is_custom_emoji(argument):
@@ -64,8 +70,14 @@ class me():
 
 
     @commands.command()
-    async def test(self, ctx, emoji: AllEmoji):
-        print(str(emoji))
+    async def test(self, ctx):
+        ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+        ctx.userauth = ctx.tree.find('userauth')
+
+        xml_emoji = ctx.userauth.find('emoji')
+
+        emo = await AllEmoji().convert(ctx, html.unescape(xml_emoji.find('id').text))
+        await ctx.send(emo)
 
 
     async def userauth_to_str(self, root: ET.Element):

@@ -226,11 +226,9 @@ class AdminCog():
         '''
         xml_emoji = ctx.userauth.find('emoji')
         if await help.is_custom_emoji(emo):
-            xml_emoji.find('custom').text = 'True'
             xml_emoji.find('id').text = str(emo)
         else:
-            xml_emoji.find('custom').text = 'False'
-            xml_emoji.find('id').text = emo
+            xml_emoji.find('id').text = html.unescape(emo)
 
         ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
 
@@ -245,15 +243,8 @@ class AdminCog():
                         .format(emo))
 
 
-    def check_role_set(ctx):
-        role = ctx.userauth.find('role')
-        if role.find('id').text != 'None':
-            return True
-        return False
-
-
     @userauth.command(name='make')
-    @commands.check(check_role_set)
+    @commands.check(help.check_userauth_role_set)
     async def userauth_make(self, ctx):
         xml_message = ctx.userauth.find('message')
         msg = await ctx.send(xml_message.find('context').text)
