@@ -2,9 +2,10 @@ import discord, os, traceback, sys
 from discord.ext import commands
 import xml.etree.ElementTree as ET
 from asyncio import sleep
-from discord import PartialEmoji
 from discord import Emoji
-import cogs.help as help
+import modules.utility
+import modules.factory
+import modules.exceptxml
 import html
 
 class AdminCog():
@@ -14,7 +15,6 @@ class AdminCog():
 
     def __init__(self, bot):
         self.bot = bot
-        self.help = help.me(bot)
 
     async def __local_check(self, ctx):
         return ctx.guild is not None and \
@@ -47,61 +47,18 @@ class AdminCog():
         print('Ignoring exception in command {}:'.format(ctx.command), file=sys.stderr)
         traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 
-    async def status(self, ctx, v):
-        class sta():
-            def __init__(self, s):
-                self.id = s
-                self.name = s
-
-        return sta(v) if v.lower() in ['enabled', 'disabled'] else False
-
-    # async def role(self, ctx, v):
-    #     try:
-    #         return (await commands.RoleConverter().convert(ctx, v)).name
-    #     except commands.CommandError:
-    #         return v
-    #
-    #
-    # async def message(self, ctx, v):
-    #     try:
-    #         return (await ctx.get_message(int(v))).id
-    #     except ValueError:
-    #         return v
-    #
-    #
-    # async def emoji(self, ctx, v):
-    #     try:
-    #         return await commands.EmojiConverter().convert(ctx, v)
-    #     except commands.BadArgument:
-    #         return v
-    # Curently writing into converters
-
-
-    # Write message and status as converters
-
 
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def init(self, ctx):
+        '''Initializes the server configs based on modules.factory properties'''
         if not os.path.isdir('server_data/{}'.format(ctx.guild.id)):
             os.makedirs('server_data/{}'.format(str(ctx.guild.id)))
 
         root = ET.Element('data')
         userauth = ET.SubElement(root, 'userauth')
 
-        # auth_status = ET.SubElement(userauth, 'status').text = 'None'
-
-        auth_role = ET.SubElement(userauth, 'role')
-        ET.SubElement(auth_role, 'id').text = 'None'
-        ET.SubElement(auth_role, 'name').text = 'None'
-
-        auth_message = ET.SubElement(userauth, 'message')
-        ET.SubElement(auth_message, 'id').text = 'None'
-        ET.SubElement(auth_message, 'context').text = 'You better add that rection if you\'re going to get into the server'
-
-        auth_emoji = ET.SubElement(userauth, 'emoji')
-        ET.SubElement(auth_emoji, 'custom').text = 'False'
-        ET.SubElement(auth_emoji, 'id').text = html.unescape('&#128077;')
+        await modules.factory.worker_userauth.create.all(userauth)
 
         ctx.tree = ET.ElementTree(root)
 
@@ -125,12 +82,13 @@ class AdminCog():
             Baka=str(cirnoBaka),
             NoWork=str(cirnoNoWork))
 
-        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
+        await modules.utility.write_xml(ctx)
         await ctx.send(':thumbsup: **{}** (`{}`) server config have been initialized.'.format(ctx.guild.name, ctx.guild.id))
 
 
     @init.before_invoke
-    async def initVerify(self, ctx):
+    async def init_verify(self, ctx):
+        '''Asks the user before initializing server configs'''
         def verification(m):
             return m.author == ctx.author and m.content.lower() in ['yes', 'no']
 
@@ -140,120 +98,127 @@ class AdminCog():
         if reply.content.lower() == 'no':
             raise commands.CommandInvokeError(':octagonal_sign: Initialization has been cancelled.')
 
-    # Currently broken
-    #
-    #
-    # @commands.command()
-    # async def configs(self, ctx):
-    #     root = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id)).getroot()
-    #     msg = ''
-    #     dis = '    {0}: {1}\n'
-    #
-    #     for E in root:
-    #         msg += '**{}**\n'.format(E.tag)
-    #         for e in E:
-    #             cvalue = await eval('self.{0}(ctx, "{1}")'.format(e.tag, e.text))
-    #             if e.tag in ['role']:
-    #                 msg += dis.format(e.tag, cvalue)
-    #             elif e.tag in ['emoji']:
-    #                 msg += dis.format(e.tag, cvalue)
-    #             elif e.tag in ['status', 'message']:
-    #                 msg += dis.format(e.tag, cvalue)
-    #         msg += '\n'
-    #     await ctx.send(msg)
-
-
-    # @commands.group()
-    # async def edit(self, ctx, group, setting, *value):
-    #     tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-    #     root = tree.getroot()
-    #
-    #     if group.lower() in (element.tag for element in root):
-    #         E = root.find(group)
-    #         e = E.find(setting)
-    #
-    #         val =  ' '.join(value)
-    #         obj = await eval('self.{}(ctx, val)'.format(setting))
-    #         print(type(obj), obj)
-    #         if obj.id:
-    #
-    #             e.text = str(obj.id)
-    #
-    #         tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-
 
     @commands.group(name='userauth')
     @commands.cooldown(1, 2, commands.BucketType.guild)
     async def userauth(self, ctx):
-        '''
-        Create the ctx.userauth attribute, used in subcommands.
-        When no arguments are given, default show status.
+        '''Manages user authentication.
+
+        Admins can either set, clear, or make.
+        Also makes the tree and root, which is used in subcommands.
         '''
         ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         ctx.userauth = ctx.tree.find('userauth')
 
         if ctx.invoked_subcommand is None:
-            await ctx.send('Here is yer current settings for userauth\
-                    \n{}'.format(await self.help.userauth_to_str(ctx.userauth)))
+            embed = await modules.utility.make_simple_embed(
+                                                'Current configs for userauth',
+                                                await modules.utility.userauth_to_str(ctx.userauth))
+            await ctx.send(embed=embed)
 
 
     @userauth.group(name='set')
     async def userauth_set(self, ctx):
-        '''
-        Command group based userauth. Splits into below.
-        '''
+        '''Command group based userauth. Splits into below'''
         pass
 
 
     @userauth_set.command(name='role')
     async def userauth_set_role(self, ctx, role: discord.Role):
-        '''
-        Convert arg status into discord.Role object, write into xml under role -> id, name.
-        '''
+        '''Takes the discord.role and converts it to a str(id), write to xml'''
         xml_role = ctx.userauth.find('role')
         xml_role.find('id').text = str(role.id)
         xml_role.find('name').text = role.name
-        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
 
         await ctx.send(':thumbsup: Role: **{}** has been saved.'\
                         .format(role.name))
 
 
     @userauth_set.command(name='emoji')
-    async def userauth_set_emoji(self, ctx, emo: help.AllEmoji):
-        '''
-        Convert arg into a compatable reaction emoji, write into xml under emoji -> custom, id, name.
-        '''
+    async def userauth_set_emoji(self, ctx, emo: modules.utility.AllEmoji):
+        '''Takes a discord.emoji and converts it to usable str, write to xml'''
         xml_emoji = ctx.userauth.find('emoji')
-        if await help.is_custom_emoji(emo):
+        if await modules.utility.is_custom_emoji(emo):
             xml_emoji.find('id').text = str(emo)
         else:
             xml_emoji.find('id').text = html.unescape(emo)
 
-        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-
         xml_message = ctx.userauth.find('message')
         xml_emoji = ctx.userauth.find('emoji')
         if xml_message.find('id') != 'None':
-            msg = await ctx.get_message(int(xml_message.find('id').text))
-            await msg.clear_reactions()
-            await msg.add_reaction(await help.AllEmoji().convert(ctx, xml_emoji.find('id').text))
+            try:
+                msg = await ctx.get_message(int(xml_message.find('id').text))
+                await msg.clear_reactions()
+                await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji.find('id').text))
+            except (discord.NotFound, ValueError):
+                pass
 
         await ctx.send(':thumbsup: Emoji: **{}** has been saved and message (if exists) has been updated.'\
                         .format(emo))
 
 
-    @userauth.command(name='make')
-    @commands.check(help.check_userauth_role_set)
-    async def userauth_make(self, ctx):
+    @userauth_set.command(name='message')
+    async def userauth_set_message(self, ctx, *, msg:str):
+        '''Takes a message, write to xml'''
         xml_message = ctx.userauth.find('message')
-        msg = await ctx.send(xml_message.find('context').text)
+        xml_message.find('content').text = msg
+
+        msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
+
+        await ctx.send(content=':thumbsup: Message has been saved.',
+                        embed=msg_embed)
+
+
+    @userauth.command(name='make')
+    @commands.check(modules.utility.check_userauth_role_set)
+    async def userauth_make(self, ctx):
+        '''Creates a message based from configs for userauth'''
+        xml_message = ctx.userauth.find('message')
+        msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
+        msg = await ctx.send(embed=msg_embed)
+
         xml_message.find('id').text = str(msg.id)
 
-        xml_emoji = ctx.userauth.find('emoji')
-        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
+        await modules.utility.write_xml(ctx)
 
-        await msg.add_reaction(await help.AllEmoji().convert(ctx, xml_emoji.find('id').text))
+        xml_emoji = ctx.userauth.find('emoji')
+        await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji.find('id').text))
+
+
+    @userauth.group(name='clear')
+    async def userauth_clear(self, ctx):
+        '''With no subommands passed, reset all of userath's configs'''
+        if ctx.subcommand_passed == 'clear':
+            await modules.factory.worker_userauth.reset.all(ctx.userauth)
+            await ctx.send(':thumbsup: Config userauth has been reset to defaults')
+
+
+    @userauth_clear.command(name='role')
+    async def userauth_clear_role(self, ctx):
+        '''Resets userauth:role configs'''
+        await modules.factory.worker_userauth.reset.role(ctx.userauth)
+        await ctx.send(':thumbsup: Config userauth:role has been reset to defaults')
+
+
+    @userauth_clear.command(name='emoji')
+    async def userauth_clear_emoji(self, ctx):
+        '''Resets userauth:emoji configs'''
+        await modules.factory.worker_userauth.reset.emoji(ctx.userauth)
+        await ctx.send(':thumbsup: Configs userauth:emoji has been reset to defaults')
+
+
+    @userauth_clear.command(name='message')
+    async def userauth_clear_message(self, ctx):
+        '''Resets userauth:message configs'''
+        await modules.factory.worker_userauth.reset.message(ctx.userauth)
+        await ctx.send(':thumbsup: Configs userauth:message has been reset to defaults')
+
+
+    @userauth_clear.after_invoke
+    @userauth_set.after_invoke
+    async def after_userauth_clear(self, ctx):
+        '''After certain commands, write xml.'''
+        await modules.utility.write_xml(ctx)
 
 
     @commands.group()

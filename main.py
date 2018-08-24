@@ -34,7 +34,7 @@ async def on_ready():
     print('READY!')
     print('-------------------------')
 
-extensions = ['cogs.member', 'cogs.admin', 'cogs.dev', 'cogs.automations', 'cogs.help']
+extensions = ['cogs.member', 'cogs.admin', 'cogs.dev', 'cogs.automations']
 
 if __name__ == '__main__':
     '''
