@@ -115,7 +115,6 @@ class AdminCog():
                                                 'Current configs for userauth',
                                                 await modules.utility.userauth_to_str(ctx.userauth))
             await ctx.send(embed=embed)
-<<<<<<< HEAD
 
 
     @userauth.group(name='set')
@@ -125,27 +124,17 @@ class AdminCog():
 
 
     @userauth_set.command(name='role')
-<<<<<<< HEAD
     async def userauth_set_role(self, ctx, *, role: discord.Role):
-=======
-    async def userauth_set_role(self, ctx, role: discord.Role):
->>>>>>> ee0569f462ef68fde119cccd54222c92883f41a4
         '''Takes the discord.role and converts it to a str(id), write to xml'''
         xml_role = ctx.userauth.find('role')
         xml_role.find('id').text = str(role.id)
         xml_role.find('name').text = role.name
 
-<<<<<<< HEAD
         await modules.utility.write_xml(ctx)
-=======
-        await ctx.send(':thumbsup: Role: **{}** has been saved.'\
-                        .format(role.name))
->>>>>>> ee0569f462ef68fde119cccd54222c92883f41a4
 
         await ctx.send(':thumbsup: Role: **{}** has been saved.'\
                         .format(role.name))
 
-<<<<<<< HEAD
 
     @userauth_set.command(name='emoji')
     async def userauth_set_emoji(self, ctx, *, emo: modules.utility.AllEmoji):
@@ -171,14 +160,6 @@ class AdminCog():
         await ctx.send(':thumbsup: Emoji: **{}** has been saved and message (if exists) has been updated.'\
                         .format(emo))
 
-=======
-
-
-    @userauth.group(name='set')
-    async def userauth_set(self, ctx):
-        '''Command group based userauth. Splits into below'''
-        pass
->>>>>>> ee0569f462ef68fde119cccd54222c92883f41a4
 
     @userauth_set.command(name='message')
     async def userauth_set_message(self, ctx, *, msg:str):
@@ -187,7 +168,6 @@ class AdminCog():
         xml_message.find('content').text = msg
         await modules.utility.write_xml(ctx)
 
-<<<<<<< HEAD
         msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
 
         await ctx.send(content=':thumbsup: Message has been saved.',
@@ -220,141 +200,12 @@ class AdminCog():
             await ctx.send(':thumbsup: Config userauth has been reset to defaults')
 
 
-=======
-    @userauth_set.command(name='emoji')
-    async def userauth_set_emoji(self, ctx, emo: modules.utility.AllEmoji):
-        '''Takes a discord.emoji and converts it to usable str, write to xml'''
-        xml_emoji = ctx.userauth.find('emoji')
-        if await modules.utility.is_custom_emoji(emo):
-            xml_emoji.find('id').text = str(emo)
-        else:
-            xml_emoji.find('id').text = html.unescape(emo)
-
-        xml_message = ctx.userauth.find('message')
-        xml_emoji = ctx.userauth.find('emoji')
-        if xml_message.find('id') != 'None':
-            try:
-                msg = await ctx.get_message(int(xml_message.find('id').text))
-                await msg.clear_reactions()
-                await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji.find('id').text))
-            except (discord.NotFound, ValueError):
-                pass
-
-        await ctx.send(':thumbsup: Emoji: **{}** has been saved and message (if exists) has been updated.'\
-                        .format(emo))
-
-
-    @userauth_set.command(name='message')
-    async def userauth_set_message(self, ctx, *, msg:str):
-        '''Takes a message, write to xml'''
-        xml_message = ctx.userauth.find('message')
-        xml_message.find('content').text = msg
-
-        msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
-
-        await ctx.send(content=':thumbsup: Message has been saved.',
-                        embed=msg_embed)
-
-
-    @userauth.command(name='make')
-    @commands.check(modules.utility.check_userauth_role_set)
-    async def userauth_make(self, ctx):
-        '''Creates a message based from configs for userauth'''
-        xml_message = ctx.userauth.find('message')
-        msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
-        msg = await ctx.send(embed=msg_embed)
-
-        xml_message.find('id').text = str(msg.id)
-
-        await modules.utility.write_xml(ctx)
-
-        xml_emoji = ctx.userauth.find('emoji')
-        await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji.find('id').text))
-
-
-=======
-    @userauth_set.command(name='role')
-    async def userauth_set_role(self, ctx, role: discord.Role):
-        '''Takes the discord.role and converts it to a str(id), write to xml'''
-        xml_role = ctx.userauth.find('role')
-        xml_role.find('id').text = str(role.id)
-        xml_role.find('name').text = role.name
-
-        await ctx.send(':thumbsup: Role: **{}** has been saved.'\
-                        .format(role.name))
-
-
-    @userauth_set.command(name='emoji')
-    async def userauth_set_emoji(self, ctx, emo: modules.utility.AllEmoji):
-        '''Takes a discord.emoji and converts it to usable str, write to xml'''
-        xml_emoji = ctx.userauth.find('emoji')
-        if await modules.utility.is_custom_emoji(emo):
-            xml_emoji.find('id').text = str(emo)
-        else:
-            xml_emoji.find('id').text = html.unescape(emo)
-
-        xml_message = ctx.userauth.find('message')
-        xml_emoji = ctx.userauth.find('emoji')
-        if xml_message.find('id') != 'None':
-            try:
-                msg = await ctx.get_message(int(xml_message.find('id').text))
-                await msg.clear_reactions()
-                await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji.find('id').text))
-            except (discord.NotFound, ValueError):
-                pass
-
-        await ctx.send(':thumbsup: Emoji: **{}** has been saved and message (if exists) has been updated.'\
-                        .format(emo))
-
-
-    @userauth_set.command(name='message')
-    async def userauth_set_message(self, ctx, *, msg:str):
-        '''Takes a message, write to xml'''
-        xml_message = ctx.userauth.find('message')
-        xml_message.find('content').text = msg
-
-        msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
-
-        await ctx.send(content=':thumbsup: Message has been saved.',
-                        embed=msg_embed)
-
-
-    @userauth.command(name='make')
-    @commands.check(modules.utility.check_userauth_role_set)
-    async def userauth_make(self, ctx):
-        '''Creates a message based from configs for userauth'''
-        xml_message = ctx.userauth.find('message')
-        msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
-        msg = await ctx.send(embed=msg_embed)
-
-        xml_message.find('id').text = str(msg.id)
-
-        await modules.utility.write_xml(ctx)
-
-        xml_emoji = ctx.userauth.find('emoji')
-        await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji.find('id').text))
-
-
->>>>>>> ee0569f462ef68fde119cccd54222c92883f41a4
-    @userauth.group(name='clear')
-    async def userauth_clear(self, ctx):
-        '''With no subommands passed, reset all of userath's configs'''
-        if ctx.subcommand_passed == 'clear':
-            await modules.factory.worker_userauth.reset.all(ctx.userauth)
-            await ctx.send(':thumbsup: Config userauth has been reset to defaults')
-<<<<<<< HEAD
-
-
->>>>>>> ee0569f462ef68fde119cccd54222c92883f41a4
     @userauth_clear.command(name='role')
     async def userauth_clear_role(self, ctx):
         '''Resets userauth:role configs'''
         await modules.factory.worker_userauth.reset.role(ctx.userauth)
-<<<<<<< HEAD
         await modules.utility.write_xml(ctx)
 
-=======
->>>>>>> ee0569f462ef68fde119cccd54222c92883f41a4
         await ctx.send(':thumbsup: Config userauth:role has been reset to defaults')
 
 
@@ -362,27 +213,8 @@ class AdminCog():
     async def userauth_clear_emoji(self, ctx):
         '''Resets userauth:emoji configs'''
         await modules.factory.worker_userauth.reset.emoji(ctx.userauth)
-<<<<<<< HEAD
         await modules.utility.write_xml(ctx)
 
-        await ctx.send(':thumbsup: Configs userauth:emoji has been reset to defaults')
-
-=======
-=======
-
-
-    @userauth_clear.command(name='role')
-    async def userauth_clear_role(self, ctx):
-        '''Resets userauth:role configs'''
-        await modules.factory.worker_userauth.reset.role(ctx.userauth)
-        await ctx.send(':thumbsup: Config userauth:role has been reset to defaults')
-
-
-    @userauth_clear.command(name='emoji')
-    async def userauth_clear_emoji(self, ctx):
-        '''Resets userauth:emoji configs'''
-        await modules.factory.worker_userauth.reset.emoji(ctx.userauth)
->>>>>>> ee0569f462ef68fde119cccd54222c92883f41a4
         await ctx.send(':thumbsup: Configs userauth:emoji has been reset to defaults')
 
 
@@ -390,33 +222,9 @@ class AdminCog():
     async def userauth_clear_message(self, ctx):
         '''Resets userauth:message configs'''
         await modules.factory.worker_userauth.reset.message(ctx.userauth)
-        await ctx.send(':thumbsup: Configs userauth:message has been reset to defaults')
-<<<<<<< HEAD
->>>>>>> ee0569f462ef68fde119cccd54222c92883f41a4
-=======
->>>>>>> ee0569f462ef68fde119cccd54222c92883f41a4
-
-    @userauth_clear.command(name='message')
-    async def userauth_clear_message(self, ctx):
-        '''Resets userauth:message configs'''
-        await modules.factory.worker_userauth.reset.message(ctx.userauth)
         await modules.utility.write_xml(ctx)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
         await ctx.send(':thumbsup: Configs userauth:message has been reset to defaults')
-=======
-=======
->>>>>>> ee0569f462ef68fde119cccd54222c92883f41a4
-    @userauth_clear.after_invoke
-    @userauth_set.after_invoke
-    async def after_userauth_clear(self, ctx):
-        '''After certain commands, write xml.'''
-        await modules.utility.write_xml(ctx)
-<<<<<<< HEAD
->>>>>>> ee0569f462ef68fde119cccd54222c92883f41a4
-=======
->>>>>>> ee0569f462ef68fde119cccd54222c92883f41a4
 
 
     @commands.group()
