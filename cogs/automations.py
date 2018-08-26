@@ -13,29 +13,28 @@ class AutomationsCog():
         self.bot = bot
 
     async def on_raw_reaction_add(self, payload):
+      if payload.user_id == self.bot.user.id:
+            return # The bot shouldn't listen to itself
+        
         tree = ET.parse('server_data/{}/config.xml'.format(payload.guild_id))
 
         # Userauth
         try:
             userauth = tree.find('userauth')
-            xml_role = userauth.find('role')
-            guild = self.bot.get_guild(payload.guild_id)
-            role = discord.utils.get(guild.roles, id=int(xml_role.find('id').text))
-            xml_message = userauth.find('message')
-            xml_emoji = userauth.find('emoji')
 
-            if payload.message_id == int(xml_message.find('id').text):
-                if str(payload.emoji) == html.unescape(xml_emoji.find('id').text):
-                    await guild.get_member(payload.user_id)\
-                                .add_roles(role)
-        except ValueError:
-            pass
-        except AttributeError:
-            pass
+            if userauth.find('status').text == 'enabled':
+                if payload.message_id == int(userauth.find('message').find('id').text):
+                    if str(payload.emoji) == html.unescape(userauth.find('emoji').find('id').text):
+                        guild = self.bot.get_guild(payload.guild_id)
+                        role = discord.utils.get(guild.roles,
+                                                 id=int(userauth.find('role').find('id').text))
+                        if role:
+                            await guild.get_member(payload.user_id).add_roles(role)
 
-        if payload.user_id == self.bot.user.id:
-            return # The bot shouldn't listen to itself
+        except TypeError:
+            pass        
 
+          
         # Automated user self-roles
         selfrole_list = tree.find('selfroles')
         if selfrole_list.find('status').text == 'enabled':
