@@ -2,8 +2,6 @@ import discord, os, traceback, sys
 from discord.ext import commands
 import xml.etree.ElementTree as ET
 from asyncio import sleep
-from cogs.helper import HelperCog
-AllEmoji = HelperCog.AllEmoji
 from discord import Emoji
 import modules.utility
 import modules.factory
@@ -249,7 +247,7 @@ class AdminCog():
 
 
     @rolesManage.command(name='add')
-    async def selfroleAdd(self, ctx, group: str, emoji: AllEmoji, *, role: discord.Role):
+    async def selfroleAdd(self, ctx, group: str, emoji: modules.utility.AllEmoji, *, role: discord.Role):
         """
         Associates an emoji with a role for use in selfrole assignment.
         """
@@ -325,14 +323,14 @@ class AdminCog():
         if not group_containing_role:
             raise commands.CommandInvokeError("Error: {} is not currently bound to an emoji.".format(role))
 
-        old_emoji = await AllEmoji().convert(ctx, curr_assoc.find('emoji').text)
+        old_emoji = await modules.utility.AllEmoji().convert(ctx, curr_assoc.find('emoji').text)
         group_containing_role.remove(curr_assoc)
         tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
         await self.edit_selfrole_msg(ctx, group_containing_role, True, old_emoji, False)
         await ctx.send("Role \"{}\" successfully removed; previously bound to emoji {}".format(role, old_emoji))
 
 
-    async def edit_selfrole_msg(self, ctx, group: "XML Element", change_emoji: bool, emoji: AllEmoji = None, to_add: bool = None):
+    async def edit_selfrole_msg(self, ctx, group: "XML Element", change_emoji: bool, emoji: modules.utility.AllEmoji = None, to_add: bool = None):
         """
         Adds or removes a role from the corresponding message if it exists.
         """
@@ -556,7 +554,7 @@ class AdminCog():
 
             # Add emoji to message
             for assoc in group.findall('assoc'):
-                emoji = await AllEmoji().convert(ctx, assoc.find('emoji').text)
+                emoji = await modules.utility.AllEmoji().convert(ctx, assoc.find('emoji').text)
                 await msg_obj.add_reaction(emoji)
             if group_name != '*':
                 break

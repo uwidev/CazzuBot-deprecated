@@ -6,8 +6,6 @@ import xml.etree.ElementTree as ET
 import html
 import discord
 from discord.ext import commands
-from cogs.helper import HelperCog
-AllEmoji = HelperCog.AllEmoji
 import modules.utility
 
 class AutomationsCog():
@@ -31,6 +29,8 @@ class AutomationsCog():
                     await guild.get_member(payload.user_id)\
                                 .add_roles(role)
         except ValueError:
+            pass
+        except AttributeError:
             pass
 
         if payload.user_id == self.bot.user.id:
@@ -87,7 +87,7 @@ class AutomationsCog():
         return tree, None, None
 
 
-    async def _get_single_group_msg(self, group: "XML Element") -> discord.Embed:
+    async def _get_single_group_msg(self, group: ET.Element) -> discord.Embed:
         title = "Group **{}**\n".format(group.find('name').text)
         req_role = group.find('req_role').text
         desc = ""
@@ -115,7 +115,7 @@ class AutomationsCog():
         return embed
 
 
-    async def _edit_selfrole_msg(self, guild: discord.Guild, group: "XML Element", change_emoji: bool, emoji: AllEmoji = None, to_add: bool = None):
+    async def _edit_selfrole_msg(self, guild: discord.Guild, group: ET.Element, change_emoji: bool, emoji: modules.utility.AllEmoji = None, to_add: bool = None):
         """
         Adds or removes a role from the corresponding message if it exists.
         """
@@ -137,7 +137,7 @@ class AutomationsCog():
     async def on_guild_role_delete(self, before: discord.Role):
         tree, assoc, group = self._find_role_assoc(before)
         if assoc:
-            emoji = await AllEmoji().convert(None, assoc.find('emoji').text)
+            emoji = await modules.utility.AllEmoji().convert(None, assoc.find('emoji').text)
             group.remove(assoc)
             tree.write('server_data/{}/config.xml'.format(str(before.guild.id)))
             await self._edit_selfrole_msg(before.guild, group, True, emoji, False)
@@ -158,10 +158,12 @@ class AutomationsCog():
         :return: The list of ids of messages
         """
         return list(map(int, msg_id_text.strip().split()))
-'''
+
+    '''
     async def on_message(self, message):
         await self.bot.process_commands(message)
         tree = ET.parse('server_data/{}/config.xml'.format(message.guild.id))
+    '''
 
 
 def setup(bot):
