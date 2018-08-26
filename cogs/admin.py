@@ -4,13 +4,12 @@ import xml.etree.ElementTree as ET
 from asyncio import sleep
 from cogs.helper import HelperCog
 AllEmoji = HelperCog.AllEmoji
-import re
+
 
 class AdminCog():
 
     def __init__(self, bot):
         self.bot = bot
-        self._excluded_selfroles_tags = ('selfroles', 'custom', 'unicode', 'count', 'emoji_roles', 'msg_id', 'ch_id')
 
     async def __local_check(self, ctx):
         return ctx.guild is not None and (ctx.author.guild_permissions.administrator or ctx.author.id == self.bot.owner_id)
@@ -88,9 +87,11 @@ class AdminCog():
 
         selfroles = ET.SubElement(root, 'selfroles')
         ET.SubElement(selfroles, 'associations')
-        msg_id = ET.SubElement(selfroles, 'msg_id')
+        msg = ET.SubElement(selfroles, 'message')
+        msg_id = ET.SubElement(msg, 'id')
         msg_id.text = '-42'
-        ch_id = ET.SubElement(selfroles, 'ch_id')
+        ch = ET.SubElement(selfroles, 'channel')
+        ch_id = ET.SubElement(ch, 'id')
         ch_id.text = '-42'
 
         ctx.tree = ET.ElementTree(root)
@@ -308,71 +309,60 @@ class AdminCog():
                            "Use \"c!help selfrole group\" for a list of valid commands")
 
 
-    def _is_custom_emoji(self, emoji: str):
-        return bool(re.match('<:[A-Za-z0-9~\-_]+:\d+>', emoji))
-
-
     @rolesManage.command(name='add')
-    async def selfroleAdd(self, ctx, group: str, emoji: AllEmoji, *, role: str):
+    async def selfroleAdd(self, ctx, group: str, emoji: AllEmoji, *, role: discord.Role):
         """
         Associates an emoji with a role for use in selfrole assignment.
         """
+        group_str = group   # Rename to avoid confusion in code
+
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
         if selfrole_list is None:
             raise commands.CommandInvokeError("Role list has not been initialized")
         associations = selfrole_list.find('associations')
-        if associations is None:
-            raise commands.CommandInvokeError("Please reinitialize server configs to use this command")
         groups = associations.findall('group')
-        if not self._group_exists(groups, group):
-            raise commands.CommandInvokeError(":x: ERROR: Group **{}** does not exist".format(group))
-
-        # Requirements checking
-
-        # Check role existence
-        has_role = False
-        for r in ctx.guild.roles:
-            if r.name == role:
-                has_role = True
-                break
-        if not has_role:
-            raise commands.CommandInvokeError("Role \"{}\" is not a valid role in the server".format(role))
+        group_obj = self._find_group(groups, group_str)
+        if group_obj is None:
+            raise ValueError("Group **{}** does not exist".format(group_str))
 
         # Check if emoji is bound to role
-        is_custom = type(emoji) != str
-        assoc_list = self._get_all_associations(groups)
-        for element in assoc_list:
-            if (is_custom and element.find('emoji').text == str(emoji.id)) or element.find('emoji').text == emoji:
-                raise commands.CommandInvokeError(
-                    "Error: {} is already bound to a role. Please unassign the emoji before assigning it to a different role.".format(
-                        emoji))
-            if element.find('role').text == role:
-                raise commands.CommandInvokeError(
-                    "Error: \"{}\" is already bound to an emoji. Please unbind the emoji and the role.".format(role))
+        for g in groups:
+            for assoc in g.findall('assoc'):
+                if assoc.find('emoji').text == str(emoji):
+                    raise commands.CommandInvokeError(
+                        "Error: {} is already bound to a role. Please unassign the emoji before assigning it to a different role.".format(
+                            emoji))
+                if assoc.find('role').find('id').text == str(role.id):
+                    raise commands.CommandInvokeError(
+                        "Error: \"{}\" is already bound to an emoji. Please unbind the emoji and the role.".format(role.name))
 
         # functional code
-        group_obj = None
-        for g in groups:
-            if g.get('name') == group:
-                group_obj = g
+        associations_in_group = group_obj.findall('assoc')
+        insert_at_end = True
+        new_assoc = None
+        for index in range(len(associations_in_group)):
+            if role.name < associations_in_group[index].find('role').find('name').text:
+                insert_at_end = False
+                new_assoc = ET.Element('assoc')
+                group_obj.insert(index, new_assoc)
                 break
-
-        new_assoc = ET.SubElement(group_obj, 'assoc', {'custom': '1' if is_custom else '0'})
+        if insert_at_end:
+            new_assoc = ET.SubElement(group_obj, 'assoc')
         new_assoc_emoji = ET.SubElement(new_assoc, 'emoji')
-        if is_custom: # Custom emoji
-            new_assoc_emoji.text = str(emoji.id)
-        else: # Unicode emoji
-            new_assoc_emoji.text = emoji
+        new_assoc_emoji.text = str(emoji)
         new_assoc_role = ET.SubElement(new_assoc, 'role')
-        new_assoc_role.text = role
+        new_assoc_role_name = ET.SubElement(new_assoc_role, 'name')
+        new_assoc_role_name.text = role.name
+        new_assoc_role_id = ET.SubElement(new_assoc_role, 'id')
+        new_assoc_role_id.text = str(role.id)
         tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-        await self.change_selfroles_msg_role(ctx, group_obj, emoji, True)
-        await ctx.send("Emoji {} successfully registered with role \"{}\"".format(emoji, role))
+        await self.edit_selfrole_msg(ctx, group_obj, True, emoji, True)
+        await ctx.send("Emoji {} successfully registered with role \"{}\"".format(emoji, role.name))
 
 
     @rolesManage.command(name='del')
-    async def selfroleRemove(self, ctx, *, role: str):
+    async def selfroleRemove(self, ctx, *, role: discord.Role):
         """
         Removes an emoji/role association.
         """
@@ -380,21 +370,7 @@ class AdminCog():
         selfrole_list = tree.find('selfroles')
         if not selfrole_list:
             raise commands.CommandInvokeError("Role list has not been initialized")
-
         associations = selfrole_list.find('associations')
-        if not associations:
-            raise commands.CommandInvokeError("Please reinitialize server configs to use this command")
-
-        # Requirements checking
-
-        # Check role existence
-        has_role = False
-        for r in ctx.guild.roles:
-            if r.name == role:
-                has_role = True
-                break
-        if not has_role:
-            raise commands.CommandInvokeError("Role \"{}\" is not a valid role in the server".format(role))
 
         # Check if emoji is bound to role
         groups_list = associations.findall('group')
@@ -403,92 +379,102 @@ class AdminCog():
         for group in groups_list:
             group_assocs = group.findall('assoc')
             for a in group_assocs:
-                if a.find('role').text == role:
+                if a.find('role').find('id').text == str(role.id):
                     group_containing_role = group
                     curr_assoc = a
                     break
         if not group_containing_role:
             raise commands.CommandInvokeError("Error: {} is not currently bound to an emoji.".format(role))
 
-        old_emoji = curr_assoc.find('emoji').text
-        if int(curr_assoc.get('custom')):
-            old_emoji = self.bot.get_emoji(int(old_emoji))
+        old_emoji = await AllEmoji().convert(ctx, curr_assoc.find('emoji').text)
         group_containing_role.remove(curr_assoc)
         tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-        await self.change_selfroles_msg_role(ctx, group_containing_role, old_emoji, False)
+        await self.edit_selfrole_msg(ctx, group_containing_role, True, old_emoji, False)
         await ctx.send("Role \"{}\" successfully removed; previously bound to emoji {}".format(role, old_emoji))
 
 
-    async def change_selfroles_msg_role(self, ctx, group: "XML Element", emoji: AllEmoji, to_add: bool):
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
-        selfroles_ch_id = int(selfrole_list.find('ch_id').text)
-        if selfroles_ch_id != -42:
-            group_msg_id = int(group.get('msg_id'))
-            msg_obj = await self.bot.get_channel(selfroles_ch_id).get_message(group_msg_id)
-            msg_str = await self._get_single_group_msg(group)
-            await msg_obj.edit(content=msg_str)
-            if to_add:
-                await msg_obj.add_reaction(emoji)
-            else:
-                await msg_obj.remove_reaction(emoji, self.bot.user)
-
-
-    async def change_selfroles_msg_group(self, ctx, group: "XML Element", to_add: bool):
+    async def edit_selfrole_msg(self, ctx, group: "XML Element", change_emoji: bool, emoji: AllEmoji = None, to_add: bool = None):
         """
-        Warning: this WILL modify the group's 'msg_id' parameter
-        :param ctx:
-        :param group:
-        :param to_add:
-        :return:
+        Adds or removes a role from the corresponding message if it exists.
         """
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
-        selfroles_ch_id = int(selfrole_list.find('ch_id').text)
+        channel_id = int(selfrole_list.find('channel').find('id').text)
+        if channel_id != -42:
+            group_msg_id = int(group.find('message').find('id').text)
+            msg_obj = await self.bot.get_channel(channel_id).get_message(group_msg_id)
+            embed = await self._get_single_group_msg(group)
+            await msg_obj.edit(embed=embed)
+            if change_emoji:
+                if to_add:
+                    await msg_obj.add_reaction(emoji)
+                else:
+                    await msg_obj.remove_reaction(emoji, self.bot.user)
+
+
+    async def add_delete_selfrole_msg(self, ctx, group: "XML Element", to_add: bool):
+        """
+        Adds or removes a group if necessary/possible.
+
+        Warning: this WILL modify the group's message id parameter.
+        (See RoleChStat at the top of this file for details on what 'single' mode is)
+        """
+        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+        selfrole_list = tree.find('selfroles')
+        selfroles_ch_id = int(selfrole_list.find('channel').find('id').text)
         if selfroles_ch_id != -42:
             if to_add:
-                msg_obj = await self.bot.get_channel(selfroles_ch_id).send(await self._get_single_group_msg(group))
-                group.set('msg_id', str(msg_obj.id))
+                msg_obj = await self.bot.get_channel(selfroles_ch_id).send(
+                    embed=await self._get_single_group_msg(group))
+                group.find('message').find('id').text = str(msg_obj.id)
             else:
-                msg_id = int(group.get('msg_id'))
+                msg_id = int(group.find('message').find('id').text)
                 msg_obj = await self.bot.get_channel(selfroles_ch_id).get_message(msg_id)
                 await msg_obj.delete()
-                group.set('msg_id', str(-42))
+                group.find('message').find('id').text = str(-42)
 
 
-
-    async def _get_single_group_msg(self, group: "XML Element") -> str:
-        msg = "Group **{}**:\n".format(group.get('name'))
+    async def _get_single_group_msg(self, group: "XML Element") -> discord.Embed:
+        title = "Group **{}**\n".format(group.find('name').text)
+        req_role = group.find('req_role').text
+        desc = ""
+        if req_role:
+            desc = "(requires {})".format(req_role)
         added_element = False
-        for element in group.findall('assoc'):
+        assoc_list = group.findall('assoc')
+        msg_left = ""
+        msg_right = ""
+        divider = len(assoc_list)/2
+        for index in range(len(assoc_list)):
+            assoc = assoc_list[index]
             added_element = True
-            emoji = element.find('emoji').text
-            if int(element.get('custom')):
-                emoji = self.bot.get_emoji(int(emoji))
-            msg += "\t" + str(emoji) + ' **:** ' + str(element.find('role').text) + '\n'
+            msg = "\t" + assoc.find('emoji').text + ' **:** ' + str(assoc.find('role').find('name').text) + ' ​ ​\n'
+            if index < divider:
+                msg_left += msg
+            else:
+                msg_right += msg
+        embed = discord.Embed(title=title, description=desc)
         if not added_element:
-            msg += "\tEmpty!"
-        return msg
-
-    async def _get_msg_list(self, ctx):
-        msg_list = []
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
-        associations = selfrole_list.find('associations')
-        for group in associations.findall('group'):
-            msg_list.append(await self._get_single_group_msg(group))
-        return msg_list
+            msg_left = "Empty!"
+        embed.add_field(name="----------------------", value=msg_left, inline=True)
+        if msg_right:
+            embed.add_field(name="----------------------", value=msg_right, inline=True)
+        return embed
 
 
     async def _listing_command(self, ctx):
         # NOTE: the message below uses a static prefix. Modify later to dynamically determine the prefix
-        msg_list = ["Registered emojis:\n\n"] + await self._get_msg_list(ctx)
-        if msg_list == ["Registered emojis:\n\n"]:
+        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+        selfrole_list = tree.find('selfroles')
+        associations = selfrole_list.find('associations')
+        groups_list = associations.findall('group')
+        if not groups_list:
             await ctx.send(
                 "You have not registered any groups yet! Add an group by typing c!selfrole group add <group>")
         else:
-            for msg in msg_list:
-                await ctx.send(msg)
+            await ctx.send("Registered emojis:\n\n")
+            for group in groups_list:
+                await ctx.send(embed=await self._get_single_group_msg(group))
 
 
     @selfrole.command(name='list')
@@ -524,69 +510,120 @@ class AdminCog():
         return ' '.join(str(i) for i in msg_id_list)
 
 
-    async def _sg_del(self, ctx, suppress_output = False):
+    def _remove_item_from_list(self, item_list: list, item) -> list:
+        item_list = [i for i in item_list if i != item]
+        return item_list
+
+
+    async def _delete_message(self, ctx, group_name: str, suppress_output = False) -> [int]:
         """
         Deletes the existing selfroles message.
         """
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
+        associations = selfrole_list.find('associations')
 
-        msg_ids = self._conv_to_id_list(selfrole_list.find('msg_id').text)
-        ch_id = int(selfrole_list.find('ch_id').text)
+        msg_id_list = self._conv_to_id_list(selfrole_list.find('message').find('id').text)
+        ch_id = int(selfrole_list.find('channel').find('id').text)
         if ch_id == -42:
-            raise commands.CommandInvokeError("Error: selfroles message does not exist")
+            raise commands.CommandInvokeError("Error: no selfrole assignment messages currently exist.")
 
         channel = self.bot.get_channel(ch_id)
-        for msg_id in msg_ids:
-            message = await channel.get_message(msg_id)
-            await message.delete()
+        groups_list = associations.findall('group')
+        if group_name == '*':
+            delmsg = ":bomb: All existing role assignment messages have been destroyed"
+            for msg_id in msg_id_list:
+                message = await channel.get_message(msg_id)
+                await message.delete()
+                for group in groups_list:
+                    if int(group.find('message').find('id').text) == msg_id:
+                        group.find('message').find('id').text = str(-42)
+                        break
+            msg_id_list = []
 
-        selfrole_list.find('msg_id').text = str(-42)
-        selfrole_list.find('ch_id').text = str(-42)
+            selfrole_list.find('message').find('id').text = str(-42)
+            selfrole_list.find('channel').find('id').text = str(-42)
+        else:
+            delmsg = ":x: Target message does not exist"
+            for group in groups_list:
+                if group.find('name').text != group_name:
+                    continue
+                msg_id = int(group.find('message').find('id').text)
+                if msg_id != -42:
+                    message = await channel.get_message(msg_id)
+                    await message.delete()
+                    group.find('message').find('id').text = str(-42)
+                    msg_id_list = self._remove_item_from_list(msg_id_list, msg_id)
+                    selfrole_list.find('message').find('id').text = self._conv_to_msg_text(msg_id_list)
+                    delmsg = ":bomb: Target message has been destroyed"
+                break
+            if len(msg_id_list) == 1:
+                message = await channel.get_message(msg_id_list[0])
+                await message.delete()
+                selfrole_list.find('message').find('id').text = str(-42)
+                selfrole_list.find('channel').find('id').text = str(-42)
+                msg_id_list = []
 
         tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))  # Writes the channel and message id
         if not suppress_output:
-            await ctx.send(":bomb: Existing selfroles message has been destroyed")
+            await ctx.send(delmsg)
+
+        return msg_id_list
 
 
-    async def _build_message(self, ctx, target_channel: discord.TextChannel, suppress_output = False):
+    async def _build_message(self, ctx, group_name: str, suppress_output_str: str, channel: discord.TextChannel = None):
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
         associations = selfrole_list.find('associations')
-        selfroles_ch_id = int(selfrole_list.find('ch_id').text)
-        '''
-        if target_channel_id == -21:
-            channel_id = ctx.channel.id
+        curr_channel_id = int(selfrole_list.find('channel').find('id').text)
+
+        if group_name != '*':
+            target_group = self._find_group(associations.findall('group'), group_name)
+            if not target_group:
+                raise ValueError("Group **{}** does not exist".format(group_name))
+
+        if suppress_output_str in ['true', 'false']:
+            suppress_output = suppress_output_str == 'true'
+        else:  # Default behavior
+            suppress_output = channel is None
+
+        if channel is None:  # No channel specified by user
+            if curr_channel_id != -42:
+                destination_channel = self.bot.get_channel(curr_channel_id)
+                suppress_output = curr_channel_id == ctx.message.channel.id
+            else:
+                destination_channel = ctx.message.channel
+        elif curr_channel_id != channel.id and group_name != '*':
+            raise commands.CommandInvokeError(":x: Error: Cannot create role assignment messages in multiple channels")
         else:
-            channel_id = target_channel_id
-        '''
-        channel_id = target_channel.id
+            destination_channel = channel
 
-        if selfroles_ch_id != -42:
-            await self._sg_del(ctx, suppress_output)
+        if curr_channel_id == -42:
+            msg_id_list = []
+        else:
+            msg_id_list = await self._delete_message(ctx, group_name, suppress_output)  # Receives updated message list
 
-        new_channel = self.bot.get_channel(channel_id)
-        msg_id_list = []
-        msg_obj = await new_channel.send("Add a reaction of whatever corresponds to the role you want."
-                                         " If you want to remove the role, remove the reaction")
-        msg_id_list.append(msg_obj.id)
+        if len(msg_id_list) == 0:
+            msg_obj = await destination_channel.send("Add a reaction of whatever corresponds to the role you want."
+                                                     " If you want to remove the role, remove the reaction")
+            msg_id_list.append(msg_obj.id)
 
         for group in associations.findall('group'):
-            msg_obj = await new_channel.send(await self._get_single_group_msg(group))
+            if group_name != '*' and group.find('name').text != group_name:
+                continue
+            msg_obj = await destination_channel.send(embed=await self._get_single_group_msg(group))
             msg_id_list.append(msg_obj.id)
-            group.set('msg_id', str(msg_obj.id))
+            group.find('message').find('id').text = str(msg_obj.id)
 
             # Add emoji to message
             for assoc in group.findall('assoc'):
-                emoji_str = assoc.find('emoji').text
-                if int(assoc.get('custom')):
-                    await msg_obj.add_reaction(self.bot.get_emoji(int(emoji_str)))
-                else:
-                    await msg_obj.add_reaction(emoji_str)
+                emoji = await AllEmoji().convert(ctx, assoc.find('emoji').text)
+                await msg_obj.add_reaction(emoji)
+            if group_name != '*':
+                break
 
-        selfrole_list.find('ch_id').text = str(channel_id)
-        selfrole_list.find('msg_id').text = self._conv_to_msg_text(msg_id_list)
-
+        selfrole_list.find('channel').find('id').text = str(destination_channel.id)
+        selfrole_list.find('message').find('id').text = self._conv_to_msg_text(msg_id_list)
         tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))  # Writes the channel and message id
 
         if not suppress_output:
@@ -594,30 +631,41 @@ class AdminCog():
 
 
     @selfrole.group(name='mkmsg')
-    async def selfroleMsgCreate(self, ctx, target_channel: discord.TextChannel = None, suppress_output = 'default'):
+    async def selfroleMsgCreate(self, ctx, group: str = "*", target_channel: discord.TextChannel = None, suppress_output = 'default'):
         """
-        Creates a selfrole assignment message in the target channel if specified, or the current channel by default.
+        Creates a selfrole assignment message in the target channel if specified.
+
+        Default channel varies. If no messages exist, target_channel will be the channel the command was typed in.
+        If messages exist, it will default to the channel where messages currently exist.
+
+        If group is specified, this command will only print the message corresponding to that group.
 
         If suppress_output is set to 'true', will not print out any confirmation messages. This is usually set to false
         by default, unless the target channel is the current channel.
         """
-        if target_channel == None:
-            target_channel = ctx.message.channel
-        target_channel_id = target_channel.id
-        if suppress_output in ['true', 'false']:
-            s = suppress_output == 'true'
-        else:  # Default behavior
-            s = ctx.message.channel.id == target_channel.id
-
-        await self._build_message(ctx, target_channel, s)
+        if target_channel:
+            await self._build_message(ctx, group, suppress_output, target_channel)
+        else:
+            await self._build_message(ctx, group, suppress_output)
 
 
     @selfrole.command(name='delmsg')
-    async def selfroleDestroy(self, ctx):
+    async def selfroleMsgDestroy(self, ctx, group: str = "*", suppress_output = 'default'):
         """
-        Destroys the existing selfroles message.
+        Destroys the selfrole assignment message for the specified group, or all messages if not specified.
+
+        If suppress_output is set to 'true', will not print out any confirmation messages. This is usually set to false
+        by default, unless the target channel is the current channel.
         """
-        await self._sg_del(ctx, False)
+        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+        selfrole_list = tree.find('selfroles')
+        ch_id = int(selfrole_list.find('channel').find('id').text)
+
+        if suppress_output in ['true', 'false']:
+            s = suppress_output == 'true'
+        else:  # Default behavior
+            s = ctx.message.channel.id == ch_id
+        await self._delete_message(ctx, group, s)
 
 
     @selfrole.command(name="help")
@@ -629,34 +677,59 @@ class AdminCog():
 
 
     @selfroleGroup.command(name="add")
-    async def sgCreate(self, ctx, name: str):
+    async def groupCreate(self, ctx, name: str, *, requiredRole: discord.Role = "", maxSelectable: int = 'all'):
         """
         Creates a group that holds roles. Group names cannot contain whitespace.
+
+        maxSelectable represents the maximum number of roles a user can select from the group. By default, all roles
+        from a group may be assigned at once. Setting this number to 0 will have the same effect.
         """
+        if name == '*':
+            raise commands.CommandInvokeError(":x: ERROR: Name ***** is reserved.")
+        if type(maxSelectable) == int and maxSelectable <= 0:
+            maxSelectable = 'all'
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
         associations = selfrole_list.find('associations')
         groups_list = associations.findall('group')
-        if self._group_exists(groups_list, name):
+        if not (self._find_group(groups_list, name) is None):
             raise commands.CommandInvokeError(":x: ERROR: group name **{}** already in use".format(name))
-        group = ET.SubElement(associations, 'group', {'name': name, 'msg_id': str(-42)})
 
-        await self.change_selfroles_msg_group(ctx, group, True)
-        msg_id_list = self._conv_to_id_list(selfrole_list.find('msg_id').text) + [group.get('msg_id')]
-        selfrole_list.find('msg_id').text = self._conv_to_msg_text(msg_id_list)
+        # Insert the element in the correct location
+        insert_at_end = True
+        group = None
+        for index in range(len(groups_list)):
+            if name < groups_list[index].find('name').text:
+                insert_at_end = False
+                group = ET.Element('group')
+                associations.insert(index, group)
+                break
+        if insert_at_end:
+            group = ET.SubElement(associations, 'group')
+        group_name = ET.SubElement(group, 'name')
+        group_name.text = name
+        msg = ET.SubElement(group, 'message')
+        msg_id = ET.SubElement(msg, 'id')
+        group_role = ET.SubElement(group, 'req_role')
+        group_max_select = ET.SubElement(group, 'max_select')
+        [msg_id.text, group_role.text, group_max_select.text] = ['-42', str(requiredRole), str(maxSelectable)]
+
+        await self.add_delete_selfrole_msg(ctx, group, True)
+        msg_id_list = self._conv_to_id_list(selfrole_list.find('message').find('id').text) + [group.find('message').find('id').text]
+        selfrole_list.find('message').find('id').text = self._conv_to_msg_text(msg_id_list)
         tree.write('server_data/{}/config.xml'.format(ctx.guild.id))
         await ctx.send("Group **{}** successfully created!".format(name))
 
 
     @selfroleGroup.command(name="del")
-    async def sgDelete(self, ctx, name: str):
+    async def groupDelete(self, ctx, name: str):
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
         associations = selfrole_list.find('associations')
         targetGroup = None
         num_roles = -1
         for group in associations.findall('group'):
-            if group.get('name') == name:
+            if group.find('name').text == name:
                 targetGroup = group
                 num_roles = len(group.findall('assoc'))
                 break
@@ -673,40 +746,58 @@ class AdminCog():
         if reply.content.lower() == 'no':
             raise commands.CommandInvokeError(':octagonal_sign: Deletion of group **{}** cancelled.'.format(name))
 
-        msg_id = int(targetGroup.get('msg_id'))
-        await self.change_selfroles_msg_group(ctx, targetGroup, False)
-        msg_id_list = [i for i in self._conv_to_id_list(selfrole_list.find('msg_id').text) if i != msg_id]
-        selfrole_list.find('msg_id').text = self._conv_to_msg_text(msg_id_list)
+        msg_id = int(targetGroup.find('message').find('id').text)
+        await self.add_delete_selfrole_msg(ctx, targetGroup, False)
+        msg_id_list = self._remove_item_from_list(self._conv_to_id_list(selfrole_list.find('message').find('id').text), msg_id)
+        selfrole_list.find('message').find('id').text = self._conv_to_msg_text(msg_id_list)
         associations.remove(targetGroup)
         tree.write('server_data/{}/config.xml'.format(ctx.guild.id))
         await ctx.send("Group **{}** successfully deleted.".format(name))
 
 
-    def _group_exists(self, groups_list, name: str):
-        exists = False
+    @selfroleGroup.group(name="mod")
+    async def groupModify(self, ctx):
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Invalid command usage <:cirnoBaka:469040361323364352>\n")
+
+
+    @groupModify.command(name="name")
+    async def group_change_name(self, ctx, oldName: str, newName: str):
+        """
+        Renames a group.
+        """
+        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+        selfrole_list = tree.find('selfroles')
+        associations = selfrole_list.find('associations')
+        groups_list = associations.findall('group')
+        group = self._find_group(groups_list, oldName)
+        if group:
+            group.find('name').text = newName
+            await self.edit_selfrole_msg(ctx, group, False)
+        tree.write('server_data/{}/config.xml'.format(ctx.guild.id))
+
+
+    @groupModify.command(name="role")
+    async def group_change_role(self, ctx, groupName: str, *, newRole: discord.Role = ""):
+        """
+        Changes the role requirement for the specified group to newRole.
+        """
+        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+        selfrole_list = tree.find('selfroles')
+        associations = selfrole_list.find('associations')
+        groups_list = associations.findall('group')
+        group = self._find_group(groups_list, groupName)
+        if group:
+            group.find('req_role').text = str(newRole)
+            await self.edit_selfrole_msg(ctx, group, False)
+        tree.write('server_data/{}/config.xml'.format(ctx.guild.id))
+
+
+    def _find_group(self, groups_list: list, name: str) -> "XML Element":
         for group in groups_list:
-            if group.get('name') == name:
-                exists = True
-                break
-        return exists
-
-
-    def _get_all_associations(self, groups_list):
-        assoc_list = []
-        for group in groups_list:
-            assoc_list.extend(group.findall('assoc'))
-
-        return assoc_list
-
-
-    @commands.command()
-    async def test2(self, ctx, emoji: AllEmoji):
-        await self.react(ctx, emoji)
-        await ctx.send(emoji)
-
-    async def react(self, ctx, emoji: AllEmoji):
-        print(emoji)
-        await ctx.message.add_reaction(emoji)
+            if group.find('name').text == name:
+                return group
+        return None
 
 
 def setup(bot):

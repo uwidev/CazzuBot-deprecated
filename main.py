@@ -11,7 +11,7 @@ handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(me
 logger.addHandler(handler)
 
 
-PREFIX = ['d!']
+PREFIX = ['f!']
 # Add bot here: https://discordapp.com/oauth2/authorize?client_id=427583823912501248&scope=bot
 
 def get_prefix(bot, msg):

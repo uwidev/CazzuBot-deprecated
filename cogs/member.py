@@ -67,12 +67,18 @@ class MemberCog():
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def tableflip(self, ctx):
+        """
+        Flips a table.
+        """
         await ctx.send("<:cirnoNoWork:469040364460834817> ︵ ┻━┻")
 
 
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def tableflipd(self, ctx):
+        """
+        Flips a table. The table lands on your message, causing it to vanish instantly.
+        """
         await ctx.message.delete()
         await ctx.send("<:cirnoNoWork:469040364460834817> ︵ ┻━┻")
 
@@ -87,6 +93,12 @@ class MemberCog():
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def noot(self, ctx):
         await ctx.send("NOOT NOOT")
+
+
+    @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    async def rads(self, ctx):
+        await ctx.send("uwi nuked the dev server")
 
 
     @commands.command(name="f")
