@@ -77,6 +77,9 @@ class AdminCog():
         ch_id = ET.SubElement(ch, 'id')
         ch_id.text = '-42'
 
+        selfrole_status = ET.SubElement(selfroles, 'status')
+        selfrole_status.text = 'enabled'
+
         await modules.factory.worker_userauth.create.all(userauth)
 
         ctx.tree = ET.ElementTree(root)
@@ -228,12 +231,18 @@ class AdminCog():
 
     @commands.group()
     async def selfrole(self, ctx):
+        """
+        Basic group command for self role assignment. Splits into below.
+        """
         if ctx.invoked_subcommand is None:
             await ctx.send('Invalid command <:cirnoNoWork:469040364460834817>')
 
 
     @selfrole.group(name='role')
     async def rolesManage(self, ctx):
+        """
+        Base command for commands which add or remove roles.
+        """
         if ctx.invoked_subcommand is None:
             await ctx.send("Invalid command usage <:cirnoBaka:469040361323364352>\n" +
                            "Use \"c!help selfrole role\" for a list of valid commands")
@@ -241,15 +250,30 @@ class AdminCog():
 
     @selfrole.group(name='group')
     async def selfroleGroup(self, ctx):
+        """
+        Base command for commands which affect groups. Groups are used to store roles.
+        """
         if ctx.invoked_subcommand is None:
             await ctx.send("Invalid command usage <:cirnoBaka:469040361323364352>\n" +
                            "Use \"c!help selfrole group\" for a list of valid commands")
 
 
+    @selfrole.command(name='status')
+    async def selfroleStatus(self, ctx, newStatus: str):
+        if newStatus in ['enabled', 'disabled']:
+            tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+            selfrole_list = tree.find('selfroles')
+            selfrole_list.find('status').text = newStatus
+        else:
+            raise ValueError("Status is not 'enabled' or 'disabled'")
+
+
     @rolesManage.command(name='add')
     async def selfroleAdd(self, ctx, group: str, emoji: modules.utility.AllEmoji, *, role: discord.Role):
         """
-        Associates an emoji with a role for use in selfrole assignment.
+        Adds a role and associates it with an emoji.
+        Roles must be placed in a group. See 'c!selfrole group add' for more details.
+        Will automatically update role assignment message, if one exists.
         """
         group_str = group   # Rename to avoid confusion in code
 
@@ -301,7 +325,8 @@ class AdminCog():
     @rolesManage.command(name='del')
     async def selfroleRemove(self, ctx, *, role: discord.Role):
         """
-        Removes an emoji/role association.
+        Removes a role and its corresponding emoji.
+        Will automatically update role assignment message, if one exists.
         """
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
@@ -330,9 +355,10 @@ class AdminCog():
         await ctx.send("Role \"{}\" successfully removed; previously bound to emoji {}".format(role, old_emoji))
 
 
-    async def edit_selfrole_msg(self, ctx, group: "XML Element", change_emoji: bool, emoji: modules.utility.AllEmoji = None, to_add: bool = None):
+    async def edit_selfrole_msg(self, ctx, group: ET.Element, change_emoji: bool, emoji: modules.utility.AllEmoji = None, to_add: bool = None):
         """
-        Adds or removes a role from the corresponding message if it exists.
+        Adds or removes a role from the corresponding assignment message if it exists.
+        Does not modify the XML at all, only affects the role assignment message.
         """
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
@@ -349,12 +375,14 @@ class AdminCog():
                     await msg_obj.remove_reaction(emoji, self.bot.user)
 
 
-    async def add_delete_selfrole_msg(self, ctx, group: "XML Element", to_add: bool):
+    async def add_delete_selfrole_msg(self, ctx, group: ET.Element, to_add: bool):
         """
         Adds or removes a group if necessary/possible.
 
-        Warning: this WILL modify the group's message id parameter.
-        (See RoleChStat at the top of this file for details on what 'single' mode is)
+        Warning: this WILL modify the group's message id parameter. When this function is called,
+        the calling function will have to write the XML tree to save the changes.
+
+        This function does not directly write anything to the XML file; the calling function is responsible for doing so
         """
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
@@ -371,7 +399,13 @@ class AdminCog():
                 group.find('message').find('id').text = str(-42)
 
 
-    async def _get_single_group_msg(self, group: "XML Element") -> discord.Embed:
+    async def _get_single_group_msg(self, group: ET.Element) -> discord.Embed:
+        """
+        Args:
+            group: A role assignment message group which contains 'assoc' elements.
+
+        Returns: An embed that displays the properties and contents of the specified group.
+        """
         title = "Group **{}**\n".format(group.find('name').text)
         req_role = group.find('req_role').text
         desc = ""
@@ -400,6 +434,9 @@ class AdminCog():
 
 
     async def _listing_command(self, ctx):
+        """
+        Sends a series of messages displaying the properties and contents of every group.
+        """
         # NOTE: the message below uses a static prefix. Modify later to dynamically determine the prefix
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
@@ -436,6 +473,7 @@ class AdminCog():
 
     def _conv_to_id_list(self, msg_id_text: str) -> [int]:
         """
+        Converts text stored in message->id to a list of message ids of type int
 
         :param msg_id_text: the msg_id element's text in a server_data document
         :return: The list of ids of messages
@@ -444,17 +482,23 @@ class AdminCog():
 
 
     def _conv_to_msg_text(self, msg_id_list: [int]) -> str:
+        """
+        Converts a list of messages to text storable in message->id
+        """
         return ' '.join(str(i) for i in msg_id_list)
 
 
     def _remove_item_from_list(self, item_list: list, item) -> list:
+        """
+        Removes an item from the specified list. Not type-sensitive.
+        """
         item_list = [i for i in item_list if i != item]
         return item_list
 
 
     async def _delete_message(self, ctx, group_name: str, suppress_output = False) -> [int]:
         """
-        Deletes the existing selfroles message.
+        Deletes the specified role assignment message(s).
         """
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
@@ -509,6 +553,11 @@ class AdminCog():
 
 
     async def _build_message(self, ctx, group_name: str, suppress_output_str: str, channel: discord.TextChannel = None):
+        """
+        Builds the specified role assignment message(s).
+        Automatically avoids duplicating messages by deleting the old copy.
+        This function does not permit creation of messages in multiple channels at the same time.
+        """
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
         associations = selfrole_list.find('associations')
@@ -570,15 +619,17 @@ class AdminCog():
     @selfrole.group(name='mkmsg')
     async def selfroleMsgCreate(self, ctx, group: str = "*", target_channel: discord.TextChannel = None, suppress_output = 'default'):
         """
-        Creates a selfrole assignment message in the target channel if specified.
+        Creates role assignment messages.
 
-        Default channel varies. If no messages exist, target_channel will be the channel the command was typed in.
+        If 'group' is specified, this command will only print the message corresponding to that group.
+        If not specified or '*' is passed, all messages will be created in the target channel.
+
+        target_channel: Default channel varies.
+        If no messages exist, target_channel will be the channel the command was typed in.
         If messages exist, it will default to the channel where messages currently exist.
 
-        If group is specified, this command will only print the message corresponding to that group.
-
-        If suppress_output is set to 'true', will not print out any confirmation messages. This is usually set to false
-        by default, unless the target channel is the current channel.
+        If suppress_output is set to 'true', will not print out any confirmation messages.
+        Default behavior: 'true' if target_channel is the channel where the command was typed, 'false' otherwise.
         """
         if target_channel:
             await self._build_message(ctx, group, suppress_output, target_channel)
@@ -589,10 +640,13 @@ class AdminCog():
     @selfrole.command(name='delmsg')
     async def selfroleMsgDestroy(self, ctx, group: str = "*", suppress_output = 'default'):
         """
-        Destroys the selfrole assignment message for the specified group, or all messages if not specified.
+        Destroys role assignment messages.
 
-        If suppress_output is set to 'true', will not print out any confirmation messages. This is usually set to false
-        by default, unless the target channel is the current channel.
+        If 'group' is specified, this command will only delete the message corresponding to that group.
+        If not specified or '*' is passed, all existing role assignment messages will be deleted.
+
+        If suppress_output is set to 'true', will not print out any confirmation messages.
+        Default behavior: 'true' if target_channel is the channel where the command was typed, 'false' otherwise.
         """
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
@@ -608,7 +662,7 @@ class AdminCog():
     @selfrole.command(name="help")
     async def selfroleHelp(self, ctx):
         """
-        Doesn't actually help right now
+        Doesn't actually help right now.
         """
         await ctx.send("This command is currently being worked on! Stay tuned for more details <:cirnoSmile:469040364045729792>")
 
@@ -616,10 +670,15 @@ class AdminCog():
     @selfroleGroup.command(name="add")
     async def groupCreate(self, ctx, name: str, *, requiredRole: discord.Role = "", maxSelectable: int = 'all'):
         """
-        Creates a group that holds roles. Group names cannot contain whitespace.
+        Creates a group which may contain roles. Roles must be placed in a group.
 
-        maxSelectable represents the maximum number of roles a user can select from the group. By default, all roles
-        from a group may be assigned at once. Setting this number to 0 will have the same effect.
+        Group names cannot contain whitespace.
+
+        requiredRole: the role required for a user to be able to add or remove roles from this group.
+
+        maxSelectable: the maximum number of roles a user can select from the group.
+        By default, all roles from a group may be assigned at once.
+        If an integer less than or equal to 0 is specified, will default to 'all'.
         """
         if name == '*':
             raise commands.CommandInvokeError(":x: ERROR: Name ***** is reserved.")
@@ -660,6 +719,9 @@ class AdminCog():
 
     @selfroleGroup.command(name="del")
     async def groupDelete(self, ctx, name: str):
+        """
+        Deletes a group. Prints out a confirmation message beforehand.
+        """
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
         associations = selfrole_list.find('associations')
@@ -694,6 +756,9 @@ class AdminCog():
 
     @selfroleGroup.group(name="mod")
     async def groupModify(self, ctx):
+        """
+        Base command for modifying groups, which are used to store roles.
+        """
         if ctx.invoked_subcommand is None:
             await ctx.send("Invalid command usage <:cirnoBaka:469040361323364352>\n")
 
@@ -702,6 +767,7 @@ class AdminCog():
     async def group_change_name(self, ctx, oldName: str, newName: str):
         """
         Renames a group.
+        When renaming groups, they will not be automatically sorted (as of right now).
         """
         tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = tree.find('selfroles')
@@ -730,7 +796,10 @@ class AdminCog():
         tree.write('server_data/{}/config.xml'.format(ctx.guild.id))
 
 
-    def _find_group(self, groups_list: list, name: str) -> "XML Element":
+    def _find_group(self, groups_list: list, name: str) -> ET.Element:
+        """
+        Finds the specified group with name 'name' in the list groups_list, if the group exists. Returns None otherwise.
+        """
         for group in groups_list:
             if group.find('name').text == name:
                 return group

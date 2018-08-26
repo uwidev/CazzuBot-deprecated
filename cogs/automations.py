@@ -38,22 +38,23 @@ class AutomationsCog():
 
         # Automated user self-roles
         selfrole_list = tree.find('selfroles')
-        associations = selfrole_list.find('associations')
-        selfroles_msg_ids = self._conv_to_id_list(selfrole_list.find('message').find('id').text)
-        selfroles_roles_ch = int(selfrole_list.find('channel').find('id').text)
-        guild = self.bot.get_guild(payload.guild_id)
-
-        if payload.message_id in selfroles_msg_ids and payload.channel_id == selfroles_roles_ch:  # and selfrole_list.get('Status') == 'Enabled':
-            author_role_names = {str(role) for role in guild.get_member(payload.user_id).roles}
-            for group in associations.findall('group'):
-                req_role = group.find('req_role').text
-                if req_role and not req_role in author_role_names:
-                    continue
-                for assoc in group.findall('assoc'):
-                    if str(payload.emoji) == assoc.find('emoji').text:
-                        await guild.get_member(payload.user_id).add_roles(
-                            discord.utils.get(guild.roles, id=int(assoc.find('role').find('id').text)))
-                        break
+        if selfrole_list.find('status').text == 'enabled':
+            roles_channel_id = int(selfrole_list.find('channel').find('id').text)
+            if payload.channel_id == roles_channel_id:
+                selfroles_msg_ids = self._conv_to_id_list(selfrole_list.find('message').find('id').text)
+                if payload.message_id in selfroles_msg_ids:
+                    associations = selfrole_list.find('associations')
+                    guild = self.bot.get_guild(payload.guild_id)
+                    author_role_names = {str(role) for role in guild.get_member(payload.user_id).roles}
+                    for group in associations.findall('group'):
+                        req_role = group.find('req_role').text
+                        if req_role and not req_role in author_role_names:
+                            continue
+                        for assoc in group.findall('assoc'):
+                            if str(payload.emoji) == assoc.find('emoji').text:
+                                await guild.get_member(payload.user_id).add_roles(
+                                    discord.utils.get(guild.roles, id=int(assoc.find('role').find('id').text)))
+                                break
                         
 
     async def on_raw_reaction_remove(self, payload):
@@ -61,22 +62,26 @@ class AutomationsCog():
 
         # automated user self-roles
         selfrole_list = tree.find('selfroles')
-        associations = selfrole_list.find('associations')
-        selfroles_msg_ids = self._conv_to_id_list(selfrole_list.find('message').find('id').text)
-        selfroles_roles_ch = int(selfrole_list.find('channel').find('id').text)
-        guild = self.bot.get_guild(payload.guild_id)
-
-        if payload.message_id in selfroles_msg_ids and payload.channel_id == selfroles_roles_ch:  # and selfrole_list.get('Status') == 'Enabled':
-            for assoc in associations.iter():
-                if assoc.tag != 'assoc':
-                    continue
-                if str(payload.emoji) == assoc.find('emoji').text:
-                    await guild.get_member(payload.user_id).remove_roles(
-                        discord.utils.get(guild.roles, id=int(assoc.find('role').find('id').text)))
-                    break
+        if selfrole_list.find('status').text == 'enabled':
+            roles_channel_id = int(selfrole_list.find('channel').find('id').text)
+            if payload.channel_id == roles_channel_id:
+                selfroles_msg_ids = self._conv_to_id_list(selfrole_list.find('message').find('id').text)
+                if payload.message_id in selfroles_msg_ids:
+                    associations = selfrole_list.find('associations')
+                    guild = self.bot.get_guild(payload.guild_id)
+                    for assoc in associations.iter():
+                        if assoc.tag != 'assoc':
+                            continue
+                        if str(payload.emoji) == assoc.find('emoji').text:
+                            await guild.get_member(payload.user_id).remove_roles(
+                                discord.utils.get(guild.roles, id=int(assoc.find('role').find('id').text)))
+                            break
                     
 
     def _find_role_assoc(self, role: discord.Role) -> ('tree', 'assoc', 'group'):
+        """
+        Finds the association corresponding to a particular
+        """
         tree = ET.parse('server_data/{}/config.xml'.format(role.guild.id))
         selfrole_list = tree.find('selfroles')
         associations = selfrole_list.find('associations')
@@ -88,6 +93,9 @@ class AutomationsCog():
 
 
     async def _get_single_group_msg(self, group: ET.Element) -> discord.Embed:
+        """
+        It's basically the one in admin.py. This will be moved to a different module later.
+        """
         title = "Group **{}**\n".format(group.find('name').text)
         req_role = group.find('req_role').text
         desc = ""
@@ -118,6 +126,8 @@ class AutomationsCog():
     async def _edit_selfrole_msg(self, guild: discord.Guild, group: ET.Element, change_emoji: bool, emoji: modules.utility.AllEmoji = None, to_add: bool = None):
         """
         Adds or removes a role from the corresponding message if it exists.
+
+        It's basically the one in admin.py. This will be moved to a different module later.
         """
         tree = ET.parse('server_data/{}/config.xml'.format(guild.id))
         selfrole_list = tree.find('selfroles')
@@ -135,6 +145,9 @@ class AutomationsCog():
 
 
     async def on_guild_role_delete(self, before: discord.Role):
+        """
+        Modifies the XML in case a role is deleted.
+        """
         tree, assoc, group = self._find_role_assoc(before)
         if assoc:
             emoji = await modules.utility.AllEmoji().convert(None, assoc.find('emoji').text)
@@ -144,6 +157,9 @@ class AutomationsCog():
 
 
     async def on_guild_role_update(self, before: discord.Role, after: discord.Role):
+        """
+        Modifies the XML in case a role is changed.
+        """
         tree, assoc, group = self._find_role_assoc(before)
         if assoc:
             assoc.find('role').find('name').text = after.name
@@ -153,6 +169,7 @@ class AutomationsCog():
 
     def _conv_to_id_list(self, msg_id_text: str) -> [int]:
         """
+        Converts text stored in message->id to a list of message ids of type int
 
         :param msg_id_text: the msg_id element's text in a server_data document
         :return: The list of ids of messages
