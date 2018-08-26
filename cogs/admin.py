@@ -4,6 +4,11 @@ import xml.etree.ElementTree as ET
 from asyncio import sleep
 from cogs.helper import HelperCog
 AllEmoji = HelperCog.AllEmoji
+from discord import Emoji
+import modules.utility
+import modules.factory
+import modules.exceptxml
+import html
 
 
 class AdminCog():
@@ -12,7 +17,9 @@ class AdminCog():
         self.bot = bot
 
     async def __local_check(self, ctx):
-        return ctx.guild is not None and (ctx.author.guild_permissions.administrator or ctx.author.id == self.bot.owner_id)
+        return ctx.guild is not None and \
+        (ctx.author.guild_permissions.administrator or \
+        ctx.author.id == self.bot.owner_id)
 
 
     async def __error(self, ctx, error):
@@ -21,56 +28,34 @@ class AdminCog():
                 #await ctx.send(':exclamation: Dev cooldown bypass.')
                 await ctx.reinvoke()
             else:
-                await ctx.channel.send(':hand_splayed: Command has a {} second cooldown. Please try again after {} seconds.'.format(str(error.cooldown.per)[0:3], str(error.retry_after)[0:3]))
+                await ctx.channel.send(':hand_splayed: Command has a {} second cooldown. \
+                Please try again after {} seconds.'\
+                .format(str(error.cooldown.per)[0:3], str(error.retry_after)[0:3]))
 
         elif isinstance(error, commands.CommandInvokeError):
             await ctx.send('{}'.format(error.original))
-             
+
         elif isinstance(error, commands.BadArgument):
             await ctx.send(':x: ERROR: {}'.format(' '.join(error.args)))
-             
+
         elif isinstance(error, commands.MissingRequiredArgument):
             await ctx.send(':x: ERROR: {} is a required argument.'.format(error.param.name))
-             
+
+        elif isinstance(error, commands.CheckFailure):
+            await ctx.send(':x: ERROR: {} is a required argument.'.format(error))
+
         print('Ignoring exception in command {}:'.format(ctx.command), file=sys.stderr)
         traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
-     
-     
-    async def status(self, ctx, v):
-        class sta():
-            def __init__(self, s):
-                self.id = s
-                self.name = s
-        
-        return sta(v) if v.lower() in ['enabled', 'disabled'] else False
-        
-    
-    async def role(self, ctx, v):
-        r = await commands.RoleConverter().convert(ctx, v)
-        return r
-    
-        
-    async def message(self, ctx, v):
-        msg = await ctx.get_message(int(v))
-        return msg
-        
-    
-    async def emoji(self, ctx, v):
-        e = await commands.EmojiConverter().convert(ctx, v)
-        return e
-        
-        
-    '''
-    Write message and status as converters
-    '''
-    
+
+
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def init(self, ctx):
+        '''Initializes the server configs based on modules.factory properties'''
         if not os.path.isdir('server_data/{}'.format(ctx.guild.id)):
             os.makedirs('server_data/{}'.format(str(ctx.guild.id)))
 
-        root = ET.Element('data')        
+        root = ET.Element('data')
         userauth = ET.SubElement(root, 'userauth')
         
         auth_status = ET.SubElement(userauth, 'status')
@@ -94,14 +79,17 @@ class AdminCog():
         ch_id = ET.SubElement(ch, 'id')
         ch_id.text = '-42'
 
+        await modules.factory.worker_userauth.create.all(userauth)
+
         ctx.tree = ET.ElementTree(root)
 
-        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
+        await modules.utility.write_xml(ctx)
         await ctx.send(':thumbsup: **{}** (`{}`) server config have been initialized.'.format(ctx.guild.name, ctx.guild.id))
 
 
     @init.before_invoke
-    async def initVerify(self, ctx):
+    async def init_verify(self, ctx):
+        '''Asks the user before initializing server configs'''
         def verification(m):
             return m.author == ctx.author and m.content.lower() in ['yes', 'no']
 
@@ -112,181 +100,132 @@ class AdminCog():
             raise commands.CommandInvokeError(':octagonal_sign: Initialization has been cancelled.')
 
 
-    @commands.command()
-    async def configs(self, ctx):        
-        root = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id)).getroot()
-        msg = ''
-        dis = '    {0}: {1}\n'
-        
-        for E in root:
-            msg += '**{}**\n'.format(E.tag)
-            for e in E:
-                cvalue = await eval('self.{0}(ctx, "{1}")'.format(e.tag, e.text))
-                if e.tag in ['role']:
-                    msg += dis.format(e.tag, cvalue.name)
-                elif e.tag in ['emoji']:
-                    msg += dis.format(e.tag, cvalue)
-                elif e.tag in ['status', 'message']:
-                    msg += dis.format(e.tag, cvalue.id)                
-            msg += '\n'
-        await ctx.send(msg)
-        
-        
-    @commands.group()
-    async def edit(self, ctx, group, setting, *value):        
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        root = tree.getroot()
-        
-        if group.lower() in (element.tag for element in root):
-            E = root.find(group)
-            e = E.find(setting)
-            
-            val =  ' '.join(value)
-            obj = await eval('self.{}(ctx, val)'.format(setting))
-            print(type(obj), obj)
-            if obj.id:
-                
-                e.text = str(obj.id)
-
-            tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-    
-     
-
-    @commands.group()
+    @commands.group(name='userauth')
     @commands.cooldown(1, 2, commands.BucketType.guild)
-    async def userAuth(self, ctx):
-        # When no arguments are given, default into showing the status of userauth
+    async def userauth(self, ctx):
+        '''Manages user authentication.
+
+        Admins can either set, clear, or make.
+        Also makes the tree and root, which is used in subcommands.
+        '''
         ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         ctx.userauth = ctx.tree.find('userauth')
 
-        if ctx.subcommand_passed == None:
-            if ctx.userauth.get('Status') == 'Disabled':
-                await ctx.send(':x: Userauth is currently **disabled.**')
+        if ctx.invoked_subcommand is None:
+            embed = await modules.utility.make_simple_embed(
+                                                'Current configs for userauth',
+                                                await modules.utility.userauth_to_str(ctx.userauth))
+            await ctx.send(embed=embed)
 
-            elif ctx.userauth.get('Status') == 'Enabled':
-                try:
-                    role = discord.utils.get(ctx.guild.roles, id=int(ctx.userauth.get('AuthRoleID')))
-                except:
-                    role = 'None'
-                finally:
-                    await ctx.send(':thumbsup: User Authentication has been enabled')
 
-                    
-    @userAuth.command(name='status')
-    async def userAuthStatus(self, ctx, status: str):
-        if status.lower() == 'enable':
-            ctx.userauth.set('Status', 'Enabled')
-            ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
+    @userauth.group(name='set')
+    async def userauth_set(self, ctx):
+        '''Command group based userauth. Splits into below'''
+        pass
+
+
+    @userauth_set.command(name='role')
+    async def userauth_set_role(self, ctx, *, role: discord.Role):
+        '''Takes the discord.role and converts it to a str(id), write to xml'''
+        xml_role = ctx.userauth.find('role')
+        xml_role.find('id').text = str(role.id)
+        xml_role.find('name').text = role.name
+
+        await modules.utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: Role: **{}** has been saved.'\
+                        .format(role.name))
+
+
+    @userauth_set.command(name='emoji')
+    async def userauth_set_emoji(self, ctx, *, emo: modules.utility.AllEmoji):
+        '''Takes a discord.emoji and converts it to usable str, write to xml'''
+        xml_emoji = ctx.userauth.find('emoji')
+        if await modules.utility.is_custom_emoji(emo):
+            xml_emoji.find('id').text = str(emo)
+        else:
+            xml_emoji.find('id').text = html.unescape(emo)
+
+        await modules.utility.write_xml(ctx)
+
+        xml_message = ctx.userauth.find('message')
+        xml_emoji = ctx.userauth.find('emoji')
+        if xml_message.find('id') != 'None':
             try:
-                role = discord.utils.get(ctx.guild.roles, id=int(ctx.userauth.get('AuthRoleID')))
-            except:
-                role = 'None'
-            finally:
-                await ctx.send(':thumbsup: userauth has been enabled with the following settings:\nMessageID: **{}**\nEmoji: **{}**\nRole: **{}**\n\nPlease be sure to set these configs with `userauth set <message_id> <emoji>` and `d!userauth role <role>`.'.format(ctx.userauth.get('MessageID'), self.bot.get_emoji(int(ctx.userauth.get('EmojiID'))), role))
-        elif status.lower() == "disable":
-            ctx.userauth.set('Status', 'Disabled')
+                msg = await ctx.get_message(int(xml_message.find('id').text))
+                await msg.clear_reactions()
+                await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji.find('id').text))
+            except (discord.NotFound, ValueError):
+                pass
 
-            ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-            await ctx.send(':octagonal_sign: userauth has been disabled.')
-
-        else:
-            await ctx.send(':octagonal_sign: Must be enable or disable.')
+        await ctx.send(':thumbsup: Emoji: **{}** has been saved and message (if exists) has been updated.'\
+                        .format(emo))
 
 
-    @userAuth.command(name='role')
-    async def userAuthRole(self, ctx, role: discord.Role):
-        ctx.userauth.set('AuthRoleID', str(role.id))
-        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
+    @userauth_set.command(name='message')
+    async def userauth_set_message(self, ctx, *, msg:str):
+        '''Takes a message, write to xml'''
+        xml_message = ctx.userauth.find('message')
+        xml_message.find('content').text = msg
+        await modules.utility.write_xml(ctx)
 
-        await ctx.send(':thumbsup: Role: **{}** has been saved.'.format(discord.utils.get(ctx.guild.roles, id=int(ctx.userauth.get('AuthRoleID')))))
+        msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
 
-
-    @userAuth.command(name='set')
-    async def userAuthSet(self, ctx, msg_id, emote: discord.Emoji):
-        ctx.userauth.set('MessageID', msg_id)
-        ctx.userauth.set('Emoji', str(emote.id))
-        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-
-        await ctx.send(':thumbsup: Message **({})** and emoji id **({})** has been saved.'.format(ctx.userauth.get('MessageID'), ctx.userauth.get('Emoji')))
+        await ctx.send(content=':thumbsup: Message has been saved.',
+                        embed=msg_embed)
 
 
-    @commands.group()
-    async def channelVotes(self, ctx):
-        ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        ctx.channelvotes = ctx.tree.find('channelvotes')
+    @userauth.command(name='make')
+    @commands.check(modules.utility.check_userauth_role_set)
+    async def userauth_make(self, ctx):
+        '''Creates a message based from configs for userauth'''
+        xml_message = ctx.userauth.find('message')
+        msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
+        msg = await ctx.send(embed=msg_embed)
 
-        if ctx.subcommand_passed == None:
-            message = ''
-            if ctx.channelvotes.get('Status') == 'Enabled':
-                message += ':thumbsup: Automated Channel Votings are currently enabled.'
+        xml_message.find('id').text = str(msg.id)
 
-            else:
-                message += ':octagonal_sign: Automated Channel Votings are currently disabled.'
+        await modules.utility.write_xml(ctx)
 
-            query = list(discord.utils.get(ctx.guild.channels, id=int(voteon.get('Channel_ID'))).mention for voteon in ctx.channelvotes.findall('voteon'))
-            if len(query) == 0:
-                message += '\n\nNo channels are currently set up for automated voting.'
-            else:
-                message += '\n\nChannels set for automated voting are:\n**' + '\n'.join(query)+'**'
-
-            await ctx.send(message)
+        xml_emoji = ctx.userauth.find('emoji')
+        await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji.find('id').text))
 
 
-    @channelVotes.command(name='status')
-    async def channelVotesStatus(self, ctx, status=''):
-        if status.lower() == 'enable':
-            ctx.channelvotes.set('Status', 'Enabled')
-            ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
+    @userauth.group(name='clear')
+    async def userauth_clear(self, ctx):
+        '''With no subommands passed, reset all of userath's configs'''
+        if ctx.subcommand_passed == 'clear':
+            await modules.factory.worker_userauth.reset.all(ctx.userauth)
+            await modules.utility.write_xml(ctx)
 
-            query = list(discord.utils.get(ctx.guild.channels, id=int(voteon.get('Channel_ID'))).mention for voteon in ctx.channelvotes.findall('voteon'))
-            if len(query) == 0:
-                await ctx.send(':thumbsup: Userauth is currently **enabled**.\nNo channels are currently set up for automated voting.')
-            else:
-                await ctx.send(':thumbsup: Userauth is currently **enabled**.\nChannels set for automated voting are:\n**' + '\n'.join(query)+'**')
-
-        elif status.lower() == "disable":
-            ctx.channelvotes.set('Status', 'Disabled')
-
-            ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-            await ctx.send(':octagonal_sign: Automated channel votings has been disabled.')
-
-        else:
-            message = ''
-            if ctx.channelvotes.get('Status') == 'Enabled':
-                message += ':thumbsup: Automated Channel Votings are currently enabled.'
-
-            else:
-                message += ':octagonal_sign: Automated Channel Votings are currently disabled.'
-
-            query = list(discord.utils.get(ctx.guild.channels, id=int(voteon.get('Channel_ID'))).mention for voteon in ctx.channelvotes.findall('voteon'))
-            if len(query) == 0:
-                message += '\n\nNo channels are currently set up for automated voting.'
-            elif status == '':
-                message += '\n\nChannels set for automated voting are:\n**' + '\n'.join(query)+'**'
-
-            await ctx.send(message)
+            await ctx.send(':thumbsup: Config userauth has been reset to defaults')
 
 
-    @channelVotes.command(name='add')
-    async def channelVotesAdd(self, ctx, channel: discord.TextChannel):
-        if str(channel.id) in list(element.get('Channel_ID') for element in ctx.channelvotes.iter('voteon')):
-            query = list(discord.utils.get(ctx.guild.channels, id=int(voteon.get('Channel_ID'))).mention for voteon in ctx.channelvotes.findall('voteon'))
-            raise commands.BadArgument('{} already exists in the channel lists.\n\n'.format(channel.mention) + 'Channels set for automated voting are:\n**' + '\n'.join(query)+'**')
+    @userauth_clear.command(name='role')
+    async def userauth_clear_role(self, ctx):
+        '''Resets userauth:role configs'''
+        await modules.factory.worker_userauth.reset.role(ctx.userauth)
+        await modules.utility.write_xml(ctx)
 
-        ET.SubElement(ctx.channelvotes, 'voteon', Channel_ID='{}'.format(channel.id))
-        ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-        await ctx.send(':trumpet: Channel {} has been added to the automated votings list.'.format(channel.mention))
+        await ctx.send(':thumbsup: Config userauth:role has been reset to defaults')
 
 
-    @channelVotes.command(name='remove', aliases= ['rm', 'delete', 'del'])
-    async def channelVotesRemove(self, ctx, channel: discord.TextChannel):
-        for element in ctx.channelvotes.iter('voteon'):
-            if discord.utils.get(ctx.guild.channels, id=int(element.get('Channel_ID'))) == channel:
-                ctx.channelvotes.remove(element)
-                ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
-                await ctx.send(':trumpet: Channel {} has been removed from the automated votings list.'.format(channel.mention))
-                return
-        await ctx.send(':exclamation: Channel {} is already not on the current automated votings.'.format(channel))
+    @userauth_clear.command(name='emoji')
+    async def userauth_clear_emoji(self, ctx):
+        '''Resets userauth:emoji configs'''
+        await modules.factory.worker_userauth.reset.emoji(ctx.userauth)
+        await modules.utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: Configs userauth:emoji has been reset to defaults')
+
+
+    @userauth_clear.command(name='message')
+    async def userauth_clear_message(self, ctx):
+        '''Resets userauth:message configs'''
+        await modules.factory.worker_userauth.reset.message(ctx.userauth)
+        await modules.utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: Configs userauth:message has been reset to defaults')
 
 
     @commands.group()

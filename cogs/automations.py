@@ -1,12 +1,18 @@
+'''
+For all ongoing events that need to be monitored
+'''
+
+import xml.etree.ElementTree as ET
+import html
 import discord
 from discord.ext import commands
-import xml.etree.ElementTree as ET
 from cogs.helper import HelperCog
 AllEmoji = HelperCog.AllEmoji
+import modules.utility
 
 class AutomationsCog():
     def __init__(self, bot):
-        self.bot = bot 
+        self.bot = bot
 
     async def on_raw_reaction_add(self, payload):
         tree = ET.parse('server_data/{}/config.xml'.format(payload.guild_id))
@@ -14,19 +20,18 @@ class AutomationsCog():
         # Userauth
         try:
             userauth = tree.find('userauth')
+            xml_role = userauth.find('role')
             guild = self.bot.get_guild(payload.guild_id)
+            role = discord.utils.get(guild.roles, id=int(xml_role.find('id').text))
+            xml_message = userauth.find('message')
+            xml_emoji = userauth.find('emoji')
 
-            if payload.message_id == int(userauth.get('MessageID')) and payload.emoji.id == int(
-                    userauth.get('Emoji')) and userauth.get('Status') == 'Enabled':
-                # await self.bot.get_channel(payload.channel_id).send('Success!')
-                await guild.get_member(payload.user_id).add_roles(
-                    discord.utils.get(guild.roles, id=int(userauth.get('AuthRoleID'))))
+            if payload.message_id == int(xml_message.find('id').text):
+                if str(payload.emoji) == html.unescape(xml_emoji.find('id').text):
+                    await guild.get_member(payload.user_id)\
+                                .add_roles(role)
         except ValueError:
-            print("Error: userauth settings not properly defined")
-            print("Check automations.py if you were expecting a detailed error message")
-        except TypeError:
-            print("Error: userauth settings not properly defined")
-            print("Check automations.py if you were expecting a detailed error message")
+            pass
 
         if payload.user_id == self.bot.user.id:
             return # The bot shouldn't listen to itself
@@ -49,7 +54,7 @@ class AutomationsCog():
                         await guild.get_member(payload.user_id).add_roles(
                             discord.utils.get(guild.roles, id=int(assoc.find('role').find('id').text)))
                         break
-
+                        
 
     async def on_raw_reaction_remove(self, payload):
         tree = ET.parse('server_data/{}/config.xml'.format(payload.guild_id))
@@ -69,7 +74,7 @@ class AutomationsCog():
                     await guild.get_member(payload.user_id).remove_roles(
                         discord.utils.get(guild.roles, id=int(assoc.find('role').find('id').text)))
                     break
-
+                    
 
     def _find_role_assoc(self, role: discord.Role) -> ('tree', 'assoc', 'group'):
         tree = ET.parse('server_data/{}/config.xml'.format(role.guild.id))
@@ -158,16 +163,6 @@ class AutomationsCog():
         await self.bot.process_commands(message)
         tree = ET.parse('server_data/{}/config.xml'.format(message.guild.id))
 
-        if tree.find('channelvotes').get('Status') == 'Enabled':
-            voteon = list((int(element.get('Channel_ID')) for element in tree.iter('voteon')))
-            
-            if message.channel.id in voteon:
-                print('trueee')
-                await message.add_reaction('\U0001f44d')
-                await message.add_reaction('\U0001f44e')
-                await message.add_reaction('\U0001f914')
-'''
-             
 
 def setup(bot):
     bot.add_cog(AutomationsCog(bot))
