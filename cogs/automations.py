@@ -18,18 +18,17 @@ class AutomationsCog():
         # userauth
         try:
             userauth = tree.find('userauth')
-            xml_role = userauth.find('role')
-            guild = self.bot.get_guild(payload.guild_id)
-            role = discord.utils.get(guild.roles, id=int(xml_role.find('id').text))
-            xml_message = userauth.find('message')
-            xml_emoji = userauth.find('emoji')
 
-            if payload.message_id == int(xml_message.find('id').text):
-                if str(payload.emoji) == html.unescape(xml_emoji.find('id').text):
-                    await guild.get_member(payload.user_id)\
-                                .add_roles(role)
+            if userauth.find('status').text == 'enabled':
+                if payload.message_id == int(userauth.find('message').find('id').text):
+                    if str(payload.emoji) == html.unescape(userauth.find('emoji').find('id').text):
+                        guild = self.bot.get_guild(payload.guild_id)
+                        role = discord.utils.get(guild.roles,
+                                                 id=int(userauth.find('role').find('id').text))
+                        if role:
+                            await guild.get_member(payload.user_id).add_roles(role)
 
-        except ValueError:
+        except TypeError:
             pass
 
 

@@ -5,6 +5,7 @@ import discord
 from discord.ext import commands
 import emoji
 import html
+import re
 
 def emoji_regional_update():
     '''Adds regional letters to emoji for discord-compatability checking'''
@@ -54,10 +55,15 @@ class StatusStr(commands.Converter):
     Mainly used to check to see if taken str is enabled or disabled.
     Also needs to be more flexible in accepted paramaters.
     '''
+    def __init__(self):
+        self.pos = re.compile(r'^(enabled?)|(on)$')
+        self.neg = re.compile(r'^(disabled?)|(off)$')
+
     async def convert(self, ctx, argument):
-        accepted = ['enabled', 'disabled']  # User RE to allow present tense, conver to past
-        if argument.lower() in accepted:
-            return argument.lower()
+        if re.match(self.pos, argument.lower()):
+            return 'enabled'
+        if re.match(self.neg, argument.lower()):
+            return 'disabled'
         raise commands.BadArgument('Accepted values are "enabled" or "disabled".')
 
 
@@ -68,9 +74,7 @@ async def write_xml(ctx):
 def check_userauth_role_set(ctx):
     '''A check to see if userauth role is set'''
     role = ctx.userauth.find('role')
-    if role.find('id').text != 'None':
-        return True
-    return False
+    return False if role.find('id').text is None else True
 
 
 async def is_custom_emoji(argument):
@@ -81,7 +85,7 @@ async def is_custom_emoji(argument):
 
 
 async def make_userauth_embed(msg:str):
-    '''Creates the embed for useruath make and returns that embed'''
+    '''Creates and returns the embed for useruath'''
     embed = discord.Embed(
                         title='Hallo there! Welcones to the server!',
                         description=html.unescape(msg),
@@ -92,6 +96,28 @@ async def make_userauth_embed(msg:str):
     embed.set_thumbnail(url='https://i.imgur.com/RY1IgDX.png')
 
     return embed
+
+
+async def delete_userauth(ctx):
+    try:
+        message_id = int(ctx.userauth.find('message').find('id').text)
+        msg = await ctx.get_message(message_id)
+        await msg.delete()
+
+    except (TypeError, discord.errors.NotFound):
+        pass
+
+
+async def edit_userauth(ctx, content:str):
+    msg_embed = await make_userauth_embed(content)
+    xml_message = ctx.userauth.find('message')
+
+    try:
+        client_message = await ctx.get_message(int(xml_message.find('id').text))
+        await client_message.edit(embed=msg_embed)
+
+    except (TypeError, discord.errors.NotFound):
+        pass
 
 
 async def make_simple_embed(title:str, desc:str):
@@ -106,13 +132,23 @@ async def make_simple_embed(title:str, desc:str):
     return embed
 
 
-async def userauth_to_str(root: ET.Element):
+async def userauth_to_str(ctx):
     '''Given the element of userauth as root, returns indented list as a str'''
+    root = ctx.userauth
     to_return = ''
 
-    to_return += '**role:** {}'.format(root.find('role').find('name').text)
+    to_return += '**Status:** {sta}'.format(sta=root.find('status').text.capitalize())
+
+    to_return += '**\nRole:** {na}'.format(na=root.find('role').find('name').text)
 
     xml_emoji = root.find('emoji')
-    to_return += '\n**emoji:** {}'.format(xml_emoji.find('id').text)
+    to_return += '\n**Emoji:** {emo}'.format(emo=xml_emoji.find('id').text)
+
+    # xml_greet = root.find('greet')
+    # channel_id = xml_greet.find('channel').find('id')
+    # channel = await commands.TextChannelConverter().convert(ctx, channel_id) if channel_id else None
+    # to_return += '\n**greet-status:** {sta}\n**greet-channel:** {ch}'.format(
+    #     sta=xml_greet.find('status').text,
+    #     ch=channel)
 
     return to_return

@@ -3,8 +3,8 @@ from discord.ext import commands
 import xml.etree.ElementTree as ET
 from asyncio import sleep
 from discord import Emoji
-import modules.utility
-import modules.factory
+import modules.utility as utility
+import modules.factory as factory
 import modules.exceptxml
 import html
 
@@ -42,7 +42,7 @@ class AdminCog():
             await ctx.send(':x: ERROR: {} is a required argument.'.format(error.param.name))
 
         elif isinstance(error, commands.CheckFailure):
-            await ctx.send(':x: ERROR: {} is a required argument.'.format(error))
+            await ctx.send(':x: ERROR: {}'.format(error))
 
         print('Ignoring exception in command {}:'.format(ctx.command), file=sys.stderr)
         traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
@@ -58,7 +58,7 @@ class AdminCog():
         root = ET.Element('data')
         userauth = ET.SubElement(root, 'userauth')
 
-        await modules.factory.worker_userauth.create.all(userauth)
+        await factory.WorkerUserAuth(userauth).create_all()
 
         ctx.tree = ET.ElementTree(root)
 
@@ -104,23 +104,38 @@ class AdminCog():
     async def userauth(self, ctx):
         '''Manages user authentication.
 
-        Admins can either set, clear, or make.
+        Admins can either set, reset, or make.
         Also makes the tree and root, which is used in subcommands.
         '''
         ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         ctx.userauth = ctx.tree.find('userauth')
 
         if ctx.invoked_subcommand is None:
-            embed = await modules.utility.make_simple_embed(
+            base_embed = await modules.utility.make_simple_embed(
                                                 'Current configs for userauth',
-                                                await modules.utility.userauth_to_str(ctx.userauth))
-            await ctx.send(embed=embed)
+                                                await modules.utility.userauth_to_str(ctx))
+
+
+            xml_message_content = ctx.userauth.find('message').find('content').text
+            # msg_embed = await modules.utility.make_userauth_embed(xml_message_content)
+
+            await ctx.send(embed=base_embed)
+            # await ctx.send(content='Below is what your current userauth looks like to users', embed=msg_embed)
 
 
     @userauth.group(name='set')
     async def userauth_set(self, ctx):
         '''Command group based userauth. Splits into below'''
         pass
+
+
+    @userauth_set.command(name='status')
+    async def userauth_set_status(self, ctx, status:utility.StatusStr):
+        ctx.userauth.find('status').text = status
+
+        await modules.utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: User Authentication is now {sta}.'.format(sta=status))
 
 
     @userauth_set.command(name='role')
@@ -139,22 +154,18 @@ class AdminCog():
     @userauth_set.command(name='emoji')
     async def userauth_set_emoji(self, ctx, *, emo: modules.utility.AllEmoji):
         '''Takes a discord.emoji and converts it to usable str, write to xml'''
-        xml_emoji = ctx.userauth.find('emoji')
-        if await modules.utility.is_custom_emoji(emo):
-            xml_emoji.find('id').text = str(emo)
-        else:
-            xml_emoji.find('id').text = html.unescape(emo)
+        xml_emoji_id = ctx.userauth.find('emoji').find('id')
+        xml_emoji_id.text = html.unescape(str(emo))
 
         await modules.utility.write_xml(ctx)
 
-        xml_message = ctx.userauth.find('message')
-        xml_emoji = ctx.userauth.find('emoji')
-        if xml_message.find('id') != 'None':
+        xml_message_id = ctx.userauth.find('message').find('id').text
+        if xml_message_id is not None:
             try:
-                msg = await ctx.get_message(int(xml_message.find('id').text))
+                msg = await ctx.get_message(int(xml_message_id))
                 await msg.clear_reactions()
-                await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji.find('id').text))
-            except (discord.NotFound, ValueError):
+                await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji_id))
+            except (discord.NotFound, TypeError):
                 pass
 
         await ctx.send(':thumbsup: Emoji: **{}** has been saved and message (if exists) has been updated.'\
@@ -163,21 +174,32 @@ class AdminCog():
 
     @userauth_set.command(name='message')
     async def userauth_set_message(self, ctx, *, msg:str):
-        '''Takes a message, write to xml'''
+        '''Takes a message, edits existing, write to xml'''
         xml_message = ctx.userauth.find('message')
-        xml_message.find('content').text = msg
+        xml_message_content = xml_message.find('content').text = msg
+
         await modules.utility.write_xml(ctx)
 
-        msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
+        await utility.edit_userauth(ctx, msg)
 
-        await ctx.send(content=':thumbsup: Message has been saved.',
-                        embed=msg_embed)
+        await ctx.send(content=':thumbsup: Message has been saved and message (if exists) has been updated.')
+
+
+    # @userauth_set.group(name='greet')
+    # async def userauth_set_greet(self, ctx, status:modules.utility.StatusStr):
+    #     '''Takes a StatusStr, writes to xml'''
+    #     ctx.userauth.find('greet').find('status').text = status
+    #
+    #     await modules.utility.write_xml(ctx)
+    #
+    #     await ctx.send(content=(':thumbsup: userauth is now {0}.'.format(status)))
 
 
     @userauth.command(name='make')
     @commands.check(modules.utility.check_userauth_role_set)
     async def userauth_make(self, ctx):
-        '''Creates a message based from configs for userauth'''
+        '''Deletes old userauth and creates a message based from configs for userauth'''
+        await utility.delete_userauth(ctx)
         xml_message = ctx.userauth.find('message')
         msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
         msg = await ctx.send(embed=msg_embed)
@@ -190,38 +212,41 @@ class AdminCog():
         await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji.find('id').text))
 
 
-    @userauth.group(name='clear')
-    async def userauth_clear(self, ctx):
-        '''With no subommands passed, reset all of userath's configs'''
-        if ctx.subcommand_passed == 'clear':
-            await modules.factory.worker_userauth.reset.all(ctx.userauth)
+    @userauth.group(name='reset')
+    async def userauth_reset(self, ctx):
+        '''With no subommands passed, reset all of userath's configs, deletes old userauth'''
+        if ctx.subcommand_passed == 'reset':
+            await utility.delete_userauth(ctx)
+            await factory.WorkerUserAuth(ctx.userauth).reset_all()
             await modules.utility.write_xml(ctx)
 
-            await ctx.send(':thumbsup: Config userauth has been reset to defaults')
+            await ctx.send(':thumbsup: userauth has been reset to defaults.')
 
 
-    @userauth_clear.command(name='role')
-    async def userauth_clear_role(self, ctx):
+    @userauth_reset.command(name='role')
+    async def userauth_reset_role(self, ctx):
         '''Resets userauth:role configs'''
-        await modules.factory.worker_userauth.reset.role(ctx.userauth)
+        await factory.WorkerUserAuth(ctx.userauth).reset_role()
         await modules.utility.write_xml(ctx)
 
         await ctx.send(':thumbsup: Config userauth:role has been reset to defaults')
 
 
-    @userauth_clear.command(name='emoji')
-    async def userauth_clear_emoji(self, ctx):
+    @userauth_reset.command(name='emoji')
+    async def userauth_reset_emoji(self, ctx):
         '''Resets userauth:emoji configs'''
-        await modules.factory.worker_userauth.reset.emoji(ctx.userauth)
+        await factory.WorkerUserAuth(ctx.userauth).reset_emoji()
         await modules.utility.write_xml(ctx)
 
         await ctx.send(':thumbsup: Configs userauth:emoji has been reset to defaults')
 
 
-    @userauth_clear.command(name='message')
-    async def userauth_clear_message(self, ctx):
-        '''Resets userauth:message configs'''
-        await modules.factory.worker_userauth.reset.message(ctx.userauth)
+    @userauth_reset.command(name='message')
+    async def userauth_reset_message(self, ctx):
+        '''Resets userauth:message configs, edits existing userauth'''
+        await utility.edit_userauth(ctx, factory.USERAUTH_DEFAULT_MESSAGE)
+
+        await factory.WorkerUserAuth(ctx.userauth).reset_message()
         await modules.utility.write_xml(ctx)
 
         await ctx.send(':thumbsup: Configs userauth:message has been reset to defaults')

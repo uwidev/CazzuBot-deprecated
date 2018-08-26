@@ -11,7 +11,7 @@ def setup_logging():
     handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
     logger.addHandler(handler)
 
-PREFIX = ['d!']
+PREFIX = ['u!']
 # Add bot here: https://discordapp.com/oauth2/authorize?client_id=378651742239457290&scope=bot
 
 DESC = '''Bot is in very early development for the Friends server.'''
