@@ -13,9 +13,9 @@ class AutomationsCog():
         self.bot = bot
 
     async def on_raw_reaction_add(self, payload):
-      if payload.user_id == self.bot.user.id:
+        if payload.user_id == self.bot.user.id:
             return # The bot shouldn't listen to itself
-        
+
         tree = ET.parse('server_data/{}/config.xml'.format(payload.guild_id))
 
         # Userauth
@@ -32,9 +32,9 @@ class AutomationsCog():
                             await guild.get_member(payload.user_id).add_roles(role)
 
         except TypeError:
-            pass        
+            pass
 
-          
+
         # Automated user self-roles
         selfrole_list = tree.find('selfroles')
         if selfrole_list.find('status').text == 'enabled':
@@ -54,7 +54,7 @@ class AutomationsCog():
                                 await guild.get_member(payload.user_id).add_roles(
                                     discord.utils.get(guild.roles, id=int(assoc.find('role').find('id').text)))
                                 break
-                        
+
 
     async def on_raw_reaction_remove(self, payload):
         tree = ET.parse('server_data/{}/config.xml'.format(payload.guild_id))
@@ -75,7 +75,7 @@ class AutomationsCog():
                             await guild.get_member(payload.user_id).remove_roles(
                                 discord.utils.get(guild.roles, id=int(assoc.find('role').find('id').text)))
                             break
-                    
+
 
     def _find_role_assoc(self, role: discord.Role) -> ('tree', 'assoc', 'group'):
         """

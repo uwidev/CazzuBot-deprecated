@@ -55,18 +55,8 @@ class AdminCog():
 
         root = ET.Element('data')
         userauth = ET.SubElement(root, 'userauth')
-        
-        auth_status = ET.SubElement(userauth, 'status')
-        auth_status.text = 'disabled'
-        
-        auth_authRole = ET.SubElement(userauth, 'role')
-        auth_authRole.text = 'Not yet set'
-        
-        auth_message = ET.SubElement(userauth, 'message')
-        auth_message.text = 'Not yet set'
-        
-        auth_emoji = ET.SubElement(userauth, 'emoji')
-        auth_emoji.text = 'Not yet set'
+
+        await factory.WorkerUserAuth(userauth).create_all()
 
         selfroles = ET.SubElement(root, 'selfroles')
         ET.SubElement(selfroles, 'associations')
@@ -79,8 +69,6 @@ class AdminCog():
 
         selfrole_status = ET.SubElement(selfroles, 'status')
         selfrole_status.text = 'enabled'
-
-        await factory.WorkerUserAuth(userauth).create_all()
 
         ctx.tree = ET.ElementTree(root)
 
@@ -259,6 +247,7 @@ class AdminCog():
         """
         Basic group command for self role assignment. Splits into below.
         """
+        ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         if ctx.invoked_subcommand is None:
             await ctx.send('Invalid command <:cirnoNoWork:469040364460834817>')
 
@@ -284,13 +273,11 @@ class AdminCog():
 
 
     @selfrole.command(name='status')
-    async def selfroleStatus(self, ctx, newStatus: str):
-        if newStatus in ['enabled', 'disabled']:
-            tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-            selfrole_list = tree.find('selfroles')
-            selfrole_list.find('status').text = newStatus
-        else:
-            raise ValueError("Status is not 'enabled' or 'disabled'")
+    async def selfroleStatus(self, ctx, newStatus: utility.StatusStr):
+        selfrole_list = ctx.tree.find('selfroles')
+        selfrole_list.find('status').text = newStatus
+        await modules.utility.write_xml(ctx)
+        await ctx.send('Selfroles have been {sta}'.format(sta=newStatus))
 
 
     @rolesManage.command(name='add')
@@ -302,8 +289,7 @@ class AdminCog():
         """
         group_str = group   # Rename to avoid confusion in code
 
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
+        selfrole_list = ctx.tree.find('selfroles')
         if selfrole_list is None:
             raise commands.CommandInvokeError("Role list has not been initialized")
         associations = selfrole_list.find('associations')
@@ -342,7 +328,7 @@ class AdminCog():
         new_assoc_role_name.text = role.name
         new_assoc_role_id = ET.SubElement(new_assoc_role, 'id')
         new_assoc_role_id.text = str(role.id)
-        tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
+        await modules.utility.write_xml(ctx)
         await self.edit_selfrole_msg(ctx, group_obj, True, emoji, True)
         await ctx.send("Emoji {} successfully registered with role \"{}\"".format(emoji, role.name))
 
@@ -353,8 +339,7 @@ class AdminCog():
         Removes a role and its corresponding emoji.
         Will automatically update role assignment message, if one exists.
         """
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
+        selfrole_list = ctx.tree.find('selfroles')
         if not selfrole_list:
             raise commands.CommandInvokeError("Role list has not been initialized")
         associations = selfrole_list.find('associations')
@@ -375,7 +360,7 @@ class AdminCog():
 
         old_emoji = await modules.utility.AllEmoji().convert(ctx, curr_assoc.find('emoji').text)
         group_containing_role.remove(curr_assoc)
-        tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
+        await modules.utility.write_xml(ctx)
         await self.edit_selfrole_msg(ctx, group_containing_role, True, old_emoji, False)
         await ctx.send("Role \"{}\" successfully removed; previously bound to emoji {}".format(role, old_emoji))
 
@@ -385,8 +370,7 @@ class AdminCog():
         Adds or removes a role from the corresponding assignment message if it exists.
         Does not modify the XML at all, only affects the role assignment message.
         """
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
+        selfrole_list = ctx.tree.find('selfroles')
         channel_id = int(selfrole_list.find('channel').find('id').text)
         if channel_id != -42:
             group_msg_id = int(group.find('message').find('id').text)
@@ -409,8 +393,7 @@ class AdminCog():
 
         This function does not directly write anything to the XML file; the calling function is responsible for doing so
         """
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
+        selfrole_list = ctx.tree.find('selfroles')
         selfroles_ch_id = int(selfrole_list.find('channel').find('id').text)
         if selfroles_ch_id != -42:
             if to_add:
@@ -463,8 +446,7 @@ class AdminCog():
         Sends a series of messages displaying the properties and contents of every group.
         """
         # NOTE: the message below uses a static prefix. Modify later to dynamically determine the prefix
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
+        selfrole_list = ctx.tree.find('selfroles')
         associations = selfrole_list.find('associations')
         groups_list = associations.findall('group')
         if not groups_list:
@@ -525,8 +507,7 @@ class AdminCog():
         """
         Deletes the specified role assignment message(s).
         """
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
+        selfrole_list = ctx.tree.find('selfroles')
         associations = selfrole_list.find('associations')
 
         msg_id_list = self._conv_to_id_list(selfrole_list.find('message').find('id').text)
@@ -570,7 +551,7 @@ class AdminCog():
                 selfrole_list.find('channel').find('id').text = str(-42)
                 msg_id_list = []
 
-        tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))  # Writes the channel and message id
+        await modules.utility.write_xml(ctx)
         if not suppress_output:
             await ctx.send(delmsg)
 
@@ -583,8 +564,7 @@ class AdminCog():
         Automatically avoids duplicating messages by deleting the old copy.
         This function does not permit creation of messages in multiple channels at the same time.
         """
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
+        selfrole_list = ctx.tree.find('selfroles')
         associations = selfrole_list.find('associations')
         curr_channel_id = int(selfrole_list.find('channel').find('id').text)
 
@@ -673,8 +653,7 @@ class AdminCog():
         If suppress_output is set to 'true', will not print out any confirmation messages.
         Default behavior: 'true' if target_channel is the channel where the command was typed, 'false' otherwise.
         """
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
+        selfrole_list = ctx.tree.find('selfroles')
         ch_id = int(selfrole_list.find('channel').find('id').text)
 
         if suppress_output in ['true', 'false']:
@@ -709,8 +688,7 @@ class AdminCog():
             raise commands.CommandInvokeError(":x: ERROR: Name ***** is reserved.")
         if type(maxSelectable) == int and maxSelectable <= 0:
             maxSelectable = 'all'
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
+        selfrole_list = ctx.tree.find('selfroles')
         associations = selfrole_list.find('associations')
         groups_list = associations.findall('group')
         if not (self._find_group(groups_list, name) is None):
@@ -738,7 +716,7 @@ class AdminCog():
         await self.add_delete_selfrole_msg(ctx, group, True)
         msg_id_list = self._conv_to_id_list(selfrole_list.find('message').find('id').text) + [group.find('message').find('id').text]
         selfrole_list.find('message').find('id').text = self._conv_to_msg_text(msg_id_list)
-        tree.write('server_data/{}/config.xml'.format(ctx.guild.id))
+        await modules.utility.write_xml(ctx)
         await ctx.send("Group **{}** successfully created!".format(name))
 
 
@@ -747,8 +725,7 @@ class AdminCog():
         """
         Deletes a group. Prints out a confirmation message beforehand.
         """
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
+        selfrole_list = ctx.tree.find('selfroles')
         associations = selfrole_list.find('associations')
         targetGroup = None
         num_roles = -1
@@ -775,7 +752,7 @@ class AdminCog():
         msg_id_list = self._remove_item_from_list(self._conv_to_id_list(selfrole_list.find('message').find('id').text), msg_id)
         selfrole_list.find('message').find('id').text = self._conv_to_msg_text(msg_id_list)
         associations.remove(targetGroup)
-        tree.write('server_data/{}/config.xml'.format(ctx.guild.id))
+        await modules.utility.write_xml(ctx)
         await ctx.send("Group **{}** successfully deleted.".format(name))
 
 
@@ -794,15 +771,14 @@ class AdminCog():
         Renames a group.
         When renaming groups, they will not be automatically sorted (as of right now).
         """
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
+        selfrole_list = ctx.tree.find('selfroles')
         associations = selfrole_list.find('associations')
         groups_list = associations.findall('group')
         group = self._find_group(groups_list, oldName)
         if group:
             group.find('name').text = newName
             await self.edit_selfrole_msg(ctx, group, False)
-        tree.write('server_data/{}/config.xml'.format(ctx.guild.id))
+        await modules.utility.write_xml(ctx)
 
 
     @groupModify.command(name="role")
@@ -810,15 +786,14 @@ class AdminCog():
         """
         Changes the role requirement for the specified group to newRole.
         """
-        tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        selfrole_list = tree.find('selfroles')
+        selfrole_list = ctx.tree.find('selfroles')
         associations = selfrole_list.find('associations')
         groups_list = associations.findall('group')
         group = self._find_group(groups_list, groupName)
         if group:
             group.find('req_role').text = str(newRole)
             await self.edit_selfrole_msg(ctx, group, False)
-        tree.write('server_data/{}/config.xml'.format(ctx.guild.id))
+        await modules.utility.write_xml(ctx)
 
 
     def _find_group(self, groups_list: list, name: str) -> ET.Element:
