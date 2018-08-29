@@ -43,7 +43,7 @@ def emoji_regional_update():
 
 # Userful Converters
 class AllEmoji(commands.EmojiConverter):
-    '''Converts both toa custom or discord-compatable unicode emoji'''
+    '''Converts both to a custom or discord-compatable unicode emoji'''
     async def convert(self, ctx, argument):
         if await is_custom_emoji(argument):
             return await super().convert(ctx, argument)
@@ -61,18 +61,43 @@ class StatusStr(commands.Converter):
 
     async def convert(self, ctx, argument):
         if re.match(self.pos, argument.lower()):
-            return 'enabled'
+            return ('enabled', 'on')
         if re.match(self.neg, argument.lower()):
-            return 'disabled'
-        raise commands.BadArgument('Accepted values are "enabled" or "disabled".')
+            return ('disabled', 'off')
+        raise commands.BadArgument('Accepted values are "enabled (on)" or "disabled (off)".')
 
+
+class BoolStr(commands.Converter):
+    '''
+    Mainly used to check to see if taken str is enabled or disabled.
+    Also needs to be more flexible in accepted paramaters.
+    '''
+    def __init__(self):
+        self.pos = re.compile(r'^(true?)$')
+        self.neg = re.compile(r'^(false?)$')
+
+    async def convert(self, ctx, argument):
+        if re.match(self.pos, argument.lower()):
+            return 'true'
+        if re.match(self.neg, argument.lower()):
+            return 'false'
+        raise commands.BadArgument('Accepted values are "true" or "false".')
+
+
+async def load_tree(ctx):
+    return ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+
+async def load_tree_id(id):
+    return ET.parse('server_data/{}/config.xml'.format(id))
 
 async def write_xml(ctx):
     ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
 
 
-def check_userauth_role_set(ctx):
+async def check_userauth_role_set(ctx):
     '''A check to see if userauth role is set'''
+    if not ctx.invoked_subcommand:
+        return True
     role = ctx.userauth.find('role')
     return False if role.find('id').text is None else True
 
@@ -120,6 +145,13 @@ async def edit_userauth(ctx, content:str):
         pass
 
 
+async def check_greet(xml_greet):
+    if xml_greet.find('feature').text == 'on':
+        if xml_greet.find('channel').find('id').text is not None:
+            return True
+    return False
+
+
 async def make_simple_embed(title:str, desc:str):
     '''Creates a simple discord.embed object and returns it'''
     embed = discord.Embed(
@@ -134,21 +166,47 @@ async def make_simple_embed(title:str, desc:str):
 
 async def userauth_to_str(ctx):
     '''Given the element of userauth as root, returns indented list as a str'''
-    root = ctx.userauth
+    userauth = ctx.userauth
     to_return = ''
 
-    to_return += '**Status:** {sta}'.format(sta=root.find('status').text.capitalize())
+    to_return += '**Role:** {na}'.format(na=userauth.find('role').find('name').text)
 
-    to_return += '**\nRole:** {na}'.format(na=root.find('role').find('name').text)
-
-    xml_emoji = root.find('emoji')
+    xml_emoji = userauth.find('emoji')
     to_return += '\n**Emoji:** {emo}'.format(emo=xml_emoji.find('id').text)
 
-    # xml_greet = root.find('greet')
-    # channel_id = xml_greet.find('channel').find('id')
-    # channel = await commands.TextChannelConverter().convert(ctx, channel_id) if channel_id else None
-    # to_return += '\n**greet-status:** {sta}\n**greet-channel:** {ch}'.format(
-    #     sta=xml_greet.find('status').text,
-    #     ch=channel)
+    return to_return
+
+
+async def greet_to_str(ctx):
+    greet = ctx.greet
+    to_return = ''
+
+    to_return += '**Feature:** {fe}'.format(fe=greet.find('feature').text)
+
+    to_return += '**\nUser Auth Dependence:** {ua}'.format(ua=greet.find('userauth_dependence').text)
+
+    to_return += '**\nEmbed Title:** {ti}'.format(ti=greet.find('embed').find('title').text)
+
+    to_return += '**\nEmbed Description:** {de}'.format(de=greet.find('embed').find('desc').text)
+
+    return to_return
+
+
+async def server_to_str(ctx):
+    server = ctx.server
+    to_return = ''
+
+    admin = server.find('admin').find('id').text
+    mod = server.find('mod').find('id').text
+
+    if admin is not None:
+        admin = (await commands.RoleConverter().convert(ctx, admin)).name
+
+    if mod is not None:
+        mod = (await commands.RoleConverter().convert(ctx, mod)).name
+
+    to_return += '**Admins:** {ad}'.format(ad=admin)
+
+    to_return += '\n**Mods:** {md}'.format(md=mod)
 
     return to_return

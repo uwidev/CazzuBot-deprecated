@@ -12,7 +12,7 @@ def setup_logging():
     logger.addHandler(handler)
 
 
-PREFIX = ['u!']
+PREFIX = ['!']
 
 # Add bot here: https://discordapp.com/oauth2/authorize?client_id=378651742239457290&scope=bot
 
@@ -36,7 +36,8 @@ async def on_ready():
     print('READY!')
     print('-------------------------')
 
-extensions = ['cogs.member', 'cogs.admin', 'cogs.dev', 'cogs.automations']
+extensions = ['cogs.member', 'cogs.admin', 'cogs.dev', 'cogs.automations',
+    'cogs.gowner']
 
 if __name__ == '__main__':
     '''
