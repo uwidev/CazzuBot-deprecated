@@ -102,7 +102,7 @@ class AdminCog():
 
         await modules.utility.write_xml(ctx)
 
-        xml_message_id = ctx.userauth.find('message').find('id').text
+        xml_message_id = ctx.userauth.find('embed').find('id').text
         if xml_message_id is not None:
             try:
                 msg = await ctx.get_message(int(xml_message_id))
