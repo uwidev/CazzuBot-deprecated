@@ -29,9 +29,18 @@ class DevCog():
                 else:
                     writefile.write('True')
                     self.bot.super = True
-                    await ctx.send(':trumpet: {}, you have been given super. Please be careful with it.'.format(ctx.author.mention))
+                    await ctx.send(
+                        ':trumpet: {}, you have been given super. Please be careful with it.'.format(ctx.author.mention))
 
 
+    @commands.group(hidden=True)
+    async def dev(self, ctx):
+        pass
+
+
+    @dev.group(name='avatar')
+    async def avatar(self, ctx, url):
+        pass
 
 
 def setup(bot):

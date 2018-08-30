@@ -111,19 +111,33 @@ class AdminCog():
             except (discord.NotFound, TypeError):
                 pass
 
-        await ctx.send(':thumbsup: Emoji: **{}** has been saved and message (if exists) has been updated.'\
-                        .format(emo))
+        await ctx.send(
+            ':thumbsup: Emoji: **{}** has been saved and message (if exists) has been updated.'.format(emo))
 
 
-    @userauth_set.command(name='message')
-    async def userauth_set_message(self, ctx, *, msg:str):
-        '''Takes a message, edits existing, write to xml'''
-        xml_message = ctx.userauth.find('message')
-        xml_message_content = xml_message.find('content').text = msg
+    @userauth_set.command(name='desc')
+    async def userauth_set_message(self, ctx, *, desc):
+        '''Takes a description, edits existing, write to xml'''
+        xml_embed = ctx.userauth.find('embed')
+        xml_embed.find('desc').text = desc
 
         await modules.utility.write_xml(ctx)
 
-        await utility.edit_userauth(ctx, msg)
+        await utility.edit_userauth(ctx, xml_embed.find('title').text, desc)
+
+        await ctx.send(
+            ':thumbsup: Embed Description has been saved and message (if exists) has been updated.')
+
+
+    @userauth_set.command(name='title')
+    async def userauth_set_title(self, ctx, *, title):
+        '''Takes a title, edits existing, write to xml'''
+        xml_embed = ctx.userauth.find('embed')
+        xml_embed.find('title').text = title
+
+        await modules.utility.write_xml(ctx)
+
+        await utility.edit_userauth(ctx, title, xml_embed.find('desc').text)
 
         await ctx.send(content=':thumbsup: Message has been saved and message (if exists) has been updated.')
 
@@ -133,11 +147,14 @@ class AdminCog():
     async def userauth_make(self, ctx):
         '''Deletes old userauth and creates a message based from configs for userauth'''
         await utility.delete_userauth(ctx)
-        xml_message = ctx.userauth.find('message')
-        msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
-        msg = await ctx.send(embed=msg_embed)
+        xml_embed = ctx.userauth.find('embed')
+        embed = await modules.utility.make_userauth_embed(
+            xml_embed.find('title').text,
+            xml_embed.find('desc').text)
 
-        xml_message.find('id').text = str(msg.id)
+        msg = await ctx.send(embed=embed)
+
+        xml_embed.find('id').text = str(msg.id)
 
         await modules.utility.write_xml(ctx)
 
@@ -177,9 +194,12 @@ class AdminCog():
     @userauth_reset.command(name='message')
     async def userauth_reset_message(self, ctx):
         '''Resets userauth:message configs, edits existing userauth'''
-        await utility.edit_userauth(ctx, factory.USERAUTH_DEFAULT_MESSAGE)
+        await utility.edit_userauth(
+            ctx,
+            factory.USERAUTH_DEFAULT_TITLE,
+            factory.USERAUTH_DEFAULT_DESC)
 
-        await factory.WorkerUserAuth(ctx.userauth).reset_message()
+        await factory.WorkerUserAuth(ctx.userauth).reset_embed()
         await modules.utility.write_xml(ctx)
 
         await ctx.send(':thumbsup: Configs for the User Authenticaton'
@@ -212,6 +232,14 @@ class AdminCog():
 
         await ctx.send(':thumbsup: Greetings are now **{a}**.'.format(a=arg[0]))
 
+    @greet_set.command(name='message')
+    async def greet_set_message(self, ctx, *, msg):
+        ctx.greet.find('message').find('content').text = msg
+
+        await utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: Message has been set to **``{m}``**.'.format(m=msg))
+
     @greet_set.command(name='channel')
     async def greet_set_channel(self, ctx, channel: discord.TextChannel):
         xml_channel = ctx.greet.find('channel')
@@ -223,12 +251,12 @@ class AdminCog():
 
 
     @greet_set.command(name='userauth')
-    async def greet_set_userauth(self, ctx, arg: utility.BoolStr):
-        ctx.greet.find('userauth_dependence').text = arg
+    async def greet_set_userauth(self, ctx, arg: utility.StatusStr):
+        ctx.greet.find('userauth_dependence').text = arg[0]
 
         await utility.write_xml(ctx)
 
-        await ctx.send(':thumbsup: Userauth dependency for greetings are now **{bo}**.'.format(bo=arg))
+        await ctx.send(':thumbsup: Userauth dependency for greetings are now **{bo}**.'.format(bo=arg[0]))
 
 
     @greet_set.command(name='title')
@@ -831,6 +859,18 @@ class AdminCog():
             if group.find('name').text == name:
                 return group
         return None
+
+
+    @commands.command(name='embed')
+    async def embed(self, ctx, *, titledesc):
+        try:
+            title, desc = titledesc.split('|')
+        except ValueError:
+            raise commands.BadArgument('Command requires ``|` to divide the title and description.')
+        embed = await utility.make_simple_embed(title, desc)
+        await ctx.send(embed=embed)
+        await ctx.message.delete()
+
 
 
 def setup(bot):

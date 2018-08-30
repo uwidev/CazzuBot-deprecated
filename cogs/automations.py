@@ -20,7 +20,7 @@ class AutomationsCog():
         xml_greet = tree.find('greet')
 
         if await utility.check_greet(xml_greet):
-            if xml_greet.find('userauth_dependence').text == 'false':
+            if xml_greet.find('userauth_dependence').text == 'disabled':
                 channel_id = xml_greet.find('channel').find('id').text
 
                 channel = discord.utils.get(member.guild.text_channels,
@@ -30,9 +30,11 @@ class AutomationsCog():
 
                 embed = await utility.make_simple_embed(
                     xml_embed.find('title').text,
-                    xml_embed.find('desc').text.format(MENTION=member.mention))
+                    xml_embed.find('desc'))
 
-                await channel.send(embed=embed)
+                await channel.send(
+                    content=xml_greet.find('message').findtext('content').format(MENTION=member.mention),
+                    embed=embed)
 
 
     async def on_raw_reaction_add(self, payload):
@@ -48,7 +50,7 @@ class AutomationsCog():
                                  id=int(userauth.find('role').find('id').text))
 
         if role:
-            if payload.message_id == int(userauth.find('message').find('id').text):
+            if payload.message_id == int(userauth.find('embed').find('id').text):
                 if str(payload.emoji) == html.unescape(userauth.find('emoji').find('id').text):
                     member = guild.get_member(payload.user_id)
 
@@ -58,7 +60,7 @@ class AutomationsCog():
                         # ----- Greeting for Userauth ----- #
                         xml_greet = tree.find('greet')
                         if await utility.check_greet(xml_greet):
-                            if xml_greet.find('userauth_dependence').text == 'true':
+                            if xml_greet.find('userauth_dependence').text == 'enabled':
                                 channel_id = xml_greet.find('channel').find('id').text
 
                                 channel = discord.utils.get(self.bot.get_guild(payload.guild_id).text_channels,
@@ -66,10 +68,12 @@ class AutomationsCog():
                                 xml_message = xml_greet.find('embed')
                                 embed = await utility.make_simple_embed(
                                     xml_message.find('title').text,
-                                    xml_message.find('desc').text.format(
-                                        MENTION=self.bot.get_user(payload.user_id).mention))
+                                    xml_message.find('desc').text)
 
-                                await channel.send(embed=embed)
+                                await channel.send(
+                                    content=xml_greet.find('message').findtext('content').format(
+                                        MENTION=self.bot.get_user(payload.user_id).mention),
+                                    embed=embed)
 
 
         # Automated user self-roles

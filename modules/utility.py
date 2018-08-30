@@ -109,39 +109,25 @@ async def is_custom_emoji(argument):
     return True
 
 
-async def make_userauth_embed(msg:str):
-    '''Creates and returns the embed for useruath'''
-    embed = discord.Embed(
-                        title='Hallo there! Welcones to the server!',
-                        description=html.unescape(msg),
-                        color=0x9edbf7)
-
-    #embed.set_author(name='Cirno', icon_url='https://i.imgur.com/sFG6Oty.png')
-    embed.set_footer(text='-sarono', icon_url='https://i.imgur.com/BAj8IWu.png')
-    embed.set_thumbnail(url='https://i.imgur.com/RY1IgDX.png')
-
-    return embed
-
-
 async def delete_userauth(ctx):
     try:
         message_id = int(ctx.userauth.find('message').find('id').text)
         msg = await ctx.get_message(message_id)
         await msg.delete()
 
-    except (TypeError, discord.errors.NotFound):
+    except (TypeError, AttributeError, discord.errors.NotFound):
         pass
 
 
-async def edit_userauth(ctx, content:str):
-    msg_embed = await make_userauth_embed(content)
+async def edit_userauth(ctx, title, desc):
+    msg_embed = await make_userauth_embed(title, desc)
     xml_message = ctx.userauth.find('message')
 
     try:
         client_message = await ctx.get_message(int(xml_message.find('id').text))
         await client_message.edit(embed=msg_embed)
 
-    except (TypeError, discord.errors.NotFound):
+    except (TypeError, AttributeError, discord.errors.NotFound):
         pass
 
 
@@ -152,7 +138,7 @@ async def check_greet(xml_greet):
     return False
 
 
-async def make_simple_embed(title:str, desc:str):
+async def make_simple_embed(title: str, desc: str):
     '''Creates a simple discord.embed object and returns it'''
     embed = discord.Embed(
                         title=title,
@@ -164,6 +150,20 @@ async def make_simple_embed(title:str, desc:str):
     return embed
 
 
+async def make_userauth_embed(title: str, desc: str):
+    '''Creates and returns the embed for useruath'''
+    embed = discord.Embed(
+                        title=title,
+                        description=desc,
+                        color=0x9edbf7)
+
+    #embed.set_author(name='Cirno', icon_url='https://i.imgur.com/sFG6Oty.png')
+    embed.set_footer(text='-sarono', icon_url='https://i.imgur.com/BAj8IWu.png')
+    embed.set_thumbnail(url='https://i.imgur.com/RY1IgDX.png')
+
+    return embed
+
+
 async def userauth_to_str(ctx):
     '''Given the element of userauth as root, returns indented list as a str'''
     userauth = ctx.userauth
@@ -171,8 +171,11 @@ async def userauth_to_str(ctx):
 
     to_return += '**Role:** {na}'.format(na=userauth.find('role').find('name').text)
 
-    xml_emoji = userauth.find('emoji')
-    to_return += '\n**Emoji:** {emo}'.format(emo=xml_emoji.find('id').text)
+    to_return += '\n**Emoji:** {emo}'.format(emo=userauth.find('emoji').find('id').text)
+
+    to_return += '\n**Title:** {tl}'.format(tl=userauth.find('embed').find('title').text)
+
+    to_return += '\n**Description:** {de}'.format(de=userauth.find('embed').find('desc').text)
 
     return to_return
 
@@ -184,6 +187,14 @@ async def greet_to_str(ctx):
     to_return += '**Feature:** {fe}'.format(fe=greet.find('feature').text)
 
     to_return += '**\nUser Auth Dependence:** {ua}'.format(ua=greet.find('userauth_dependence').text)
+
+    channel = greet.find('channel').find('id').text
+    if channel is not None:
+        channel = await commands.TextChannelConverter().convert(ctx, channel)
+
+    to_return += '**\nChannel:** {ch}'.format(ch=channel)
+
+    to_return += '**\nMessage:** {ms}'.format(ms=greet.find('message').findtext('content'))
 
     to_return += '**\nEmbed Title:** {ti}'.format(ti=greet.find('embed').find('title').text)
 
