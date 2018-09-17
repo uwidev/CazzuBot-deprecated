@@ -12,7 +12,7 @@ def setup_logging():
     logger.addHandler(handler)
 
 
-PREFIX = ['u!']
+PREFIX = ['d!']
 
 # Add bot here: https://discordapp.com/oauth2/authorize?client_id=378651742239457290&scope=bot
 

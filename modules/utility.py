@@ -67,6 +67,26 @@ class StatusStr(commands.Converter):
         raise commands.BadArgument('Accepted values are "enabled" or "disabled".')
 
 
+class MaxRoleStr(commands.Converter):
+    """
+    Used to check whether a passed argument is a numerical value or the string "all".
+    """
+    async def convert(self, ctx, argument):
+        arg = ''
+        try:
+            arg = int(argument)
+        except ValueError:
+            pass
+        if type(arg) is int:
+            if arg < 0:
+                raise commands.BadArgument("Max roles must be an integer greater than or equal to 0.")
+            else:
+                return argument if arg > 0 else 'all'
+        if argument == "all":
+            return "all"
+        raise commands.BadArgument('Accepted values are integers >= 0 or the string "all".')
+
+
 async def write_xml(ctx):
     ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
 
@@ -152,3 +172,8 @@ async def userauth_to_str(ctx):
     #     ch=channel)
 
     return to_return
+
+
+async def arg_to_role(ctx, r: tuple) -> discord.Role:
+    s = ' '.join(r)
+    return await commands.RoleConverter().convert(ctx, s)

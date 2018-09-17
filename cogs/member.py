@@ -8,7 +8,7 @@ class MemberCog():
 
     def __init__(self, bot):
         self.bot = bot
-        self.default_repeat_msg = "You tried to send an empty message <:cirnoBaka:469040361323364352>"
+        self.default_repeat_msg = "You tried to send an empty message <:cirnoBaka:489185059732193298>"
         
     '''
     async def __error(self, ctx, error):
@@ -36,7 +36,7 @@ class MemberCog():
         """
         The bot will repeat whatever you say!
         """
-        if msg == None:
+        if msg is None:
             msg = self.default_repeat_msg
         await ctx.send(msg)
     
@@ -48,9 +48,10 @@ class MemberCog():
         """
         Repeats your message while deleting it. Super incognito mode activated
         """
-        if msg == None:
+        if msg is None:
             msg = self.default_repeat_msg
-        await ctx.message.delete()
+        else:
+            await ctx.message.delete()
         await ctx.send(msg)
     
     
@@ -72,7 +73,7 @@ class MemberCog():
         """
         Flips a table.
         """
-        await ctx.send("<:cirnoNoWork:469040364460834817> ︵ ┻━┻")
+        await ctx.send("<:cirnoNoWork:489185064844787712> ︵ ┻━┻")
 
 
     @commands.command()
@@ -82,13 +83,13 @@ class MemberCog():
         Flips a table. The table lands on your message, causing it to vanish instantly.
         """
         await ctx.message.delete()
-        await ctx.send("<:cirnoNoWork:469040364460834817> ︵ ┻━┻")
+        await ctx.send("<:cirnoNoWork:489185064844787712> ︵ ┻━┻")
 
 
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def unflip(self, ctx):
-        await ctx.send("┬─┬ <:cirnoBaka:469040361323364352>")
+        await ctx.send("┬─┬ <:cirnoBaka:489185059732193298>")
 
 
     @commands.command()
@@ -113,6 +114,13 @@ class MemberCog():
                 await ctx.send("{} has paid their respects for... me apparently <:cirnoSaddest:477396508832956417>".format(str(ctx.author.mention)))
             else:
                 await ctx.send("{} has paid their respects for {}!".format(str(ctx.author.mention), something))
+
+
+    @commands.command()
+    async def woop(self, ctx):
+        embed = discord.Embed()
+        embed.set_image(url="https://i.imgur.com/VKxwEzx.gif")
+        await ctx.send(embed=embed)
 
 
 def setup(bot):
