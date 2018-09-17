@@ -25,7 +25,6 @@ class gowner():
             os.makedirs('server_data/{}'.format(str(ctx.guild.id)))
 
         if ctx.invoked_subcommand is None:
-            print('DOING ALL')
             ctx.root = ET.Element('data')
             ctx.tree = ET.ElementTree(ctx.root)
 
@@ -47,7 +46,6 @@ class gowner():
             await ctx.send(':thumbsup: **{}** (`{}`) server config has been initialized.'.format(ctx.guild.name, ctx.guild.id))
 
         else:
-            print('DOING SUBCOMMAND')
             ctx.tree = await utility.load_tree(ctx)
             ctx.root = ctx.tree.getroot()
 
