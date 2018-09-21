@@ -7,6 +7,12 @@ import modules.selfrole.message
 import modules.selfrole.find
 
 
+group_modify_cmd = """
+@commands.command()
+
+"""
+
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Commands to add/remove groups
 

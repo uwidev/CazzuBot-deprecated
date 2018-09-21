@@ -12,8 +12,19 @@ import modules.selfrole.group
 import modules.selfrole.list
 import modules.selfrole.message
 import modules.selfrole.find
-stuff = []
-ree = 1
+
+group_modify_cmd = """
+print('starting test')
+@gp.selfrole.command(name=name, hidden=True)
+async def test2(ctx):
+    '''
+    Does stuff.
+    '''
+    await ctx.send('some shit')
+    
+print('ending test')
+
+"""
 
 
 class AdminCog():
@@ -408,15 +419,12 @@ class AdminCog():
         ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         await sr.group.groupDelete(self, ctx, name)
 
-
-    @commands.command(name="addAlias", aliases=stuff)
-    async def ttttt(self, ctx):
-        global stuff
-        global ree
-        stuff.append("t{}".format(ree))
-        ree += 1
-        await ctx.send('hi')
-
+    @selfrole.command(name="<group>")
+    async def help_group_sample(self, ctx):
+        """
+        Supposedly helpful docs
+        """
+        raise commands.CommandInvokeError("You can't call this <:cirnoBaka:489185059732193298>")
 
 
 def setup(bot):
