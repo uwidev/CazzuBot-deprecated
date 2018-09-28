@@ -11,7 +11,6 @@ import modules.selfrole as sr
 import modules.selfrole.group
 import modules.selfrole.list
 import modules.selfrole.message
-import modules.selfrole.find
 
 group_modify_cmd = """
 print('starting test')
@@ -251,37 +250,17 @@ class AdminCog():
         await ctx.send(':thumbsup: Configs userauth:message has been reset to defaults')
 
 
-    @commands.group(name="selfrole", aliases=['sr'], invoke_without_command=True)
-    async def selfrole(self, ctx, *args):
+    @commands.group(name="selfrole", aliases=['sr'])
+    async def selfrole(self, ctx):
         """
         Basic group command for self role assignment. Splits into below.
         """
         ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
-        print('f', args)
-        selfrole_list = ctx.tree.find('selfroles')
-        associations = selfrole_list.find('associations')
-        groups_list = associations.findall('group')
-
-        try:
-            group_name = args[0]
-            group = sr.find.find_group(groups_list, group_name)
-            if group is None:
-                raise commands.BadArgument("Group **{}** does not exist <:cirnoNoWork:489185064844787712>" \
-                                           .format(group_name))
-
-            cmd_name = args[1]
-
-            # Check if first argument is a valid command
-            if cmd_name in sr.group.cmd_list:
-                await sr.group.cmd_dict[cmd_name](self, ctx, group, *args[2:])
-                return
-        except IndexError:
-            pass
-        await ctx.send('Invalid command <:cirnoNoWork:489185064844787712>')
+        if ctx.invoked_subcommand is None:
+            await ctx.send('Invalid command <:cirnoNoWork:489185064844787712>')
 
     @selfrole.command(name='status')
     async def selfrole_status(self, ctx, newStatus: utility.StatusStr):
-        ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = ctx.tree.find('selfroles')
         selfrole_list.find('status').text = newStatus
         await modules.utility.write_xml(ctx)
@@ -294,7 +273,6 @@ class AdminCog():
 
         This command functions the same as c!selfrole role list.
         """
-        ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         # NOTE: the message below uses a static prefix. Modify later to dynamically determine the prefix
         selfrole_list = ctx.tree.find('selfroles')
         associations = selfrole_list.find('associations')
@@ -353,7 +331,6 @@ class AdminCog():
         If suppress_output is set to 'true', will not print out any confirmation messages.
         Default behavior: 'true' if target_channel is the channel where the command was typed, 'false' otherwise.
         """
-        ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         if target_channel:
             await sr.message.build_message(self, ctx, group, suppress_output, target_channel)
         else:
@@ -370,7 +347,6 @@ class AdminCog():
         If suppress_output is set to 'true', will not print out any confirmation messages.
         Default behavior: 'true' if target_channel is the channel where the command was typed, 'false' otherwise.
         """
-        ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         selfrole_list = ctx.tree.find('selfroles')
         ch_id = int(selfrole_list.find('channel').find('id').text)
 
@@ -388,14 +364,14 @@ class AdminCog():
         await ctx.send("This command is currently being worked on! Stay tuned for more details <:cirnoSmile:469040364045729792>")
 
     @selfrole.group(name="group", invoke_without_command=True)
-    async def selfrole_group(self, ctx):
+    async def srGroup(self, ctx):
         """
         Base command for the create/delete group commands. Groups are used to store roles.
         """
         await ctx.send("Invalid command usage <:cirnoBaka:489185059732193298>\n" +
                        "Use \"c!help selfrole group\" for a list of valid commands")
 
-    @selfrole_group.command(name="create", aliases=['c'])
+    @srGroup.command(name="create", aliases=['c'])
     async def groupCreate(self, ctx, *, name: str):
         """
         Creates a group which may contain roles. Roles must be placed in a group.
@@ -408,23 +384,71 @@ class AdminCog():
         By default, all roles from a group may be assigned at once.
         If an integer less than or equal to 0 is specified, will default to 'all'.
         """
-        ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         await sr.group.groupCreate(self, ctx, name)
 
-    @selfrole_group.command(name="delete", aliases=['d'])
+    @srGroup.command(name="delete", aliases=['d'])
     async def groupDelete(self, ctx, *, name: str):
         """
         Deletes a group. Prints out a confirmation message beforehand.
         """
-        ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
         await sr.group.groupDelete(self, ctx, name)
 
-    @selfrole.command(name="<group>")
-    async def help_group_sample(self, ctx):
+    @selfrole.group(name="roles", invoke_without_command=True)
+    async def srRoles(self, ctx):
         """
-        Supposedly helpful docs
+        Base command for the create/delete role commands.
         """
-        raise commands.CommandInvokeError("You can't call this <:cirnoBaka:489185059732193298>")
+        await ctx.send("Invalid command usage <:cirnoBaka:489185059732193298>\n" +
+                       "Use \"c!help selfrole roles\" for a list of valid commands")
+
+    @srRoles.command(name="add")
+    async def srAdd(self, ctx, group: modules.utility.GroupStr, emoji: modules.utility.AllEmoji, role: discord.Role):
+        """
+        Adds a role and associates it with an emoji.
+        Roles must be placed in a group. See 'c!selfrole group add' for more details.
+        Will automatically update role assignment message, if one exists.
+        """
+        await sr.group.role_add(self, ctx, group, emoji, role)
+
+    @srRoles.command(name="del")
+    async def srDel(self, ctx, group: modules.utility.GroupStr, role: discord.Role):
+        """
+        Removes a role and its corresponding emoji.
+        Will automatically update role assignment message, if one exists.
+        """
+        await sr.group.role_del(self, ctx, group, role)
+
+    @selfrole.command(name="rename")
+    async def srRename(self, ctx, group: modules.utility.GroupStr, new_name: str):
+        """
+        Renames a group.
+        When renaming groups, they will not be automatically sorted (as of right now).
+        """
+        await sr.group.group_change_name(self, ctx, group, new_name)
+
+    @selfrole.command(name="req")
+    async def srReq(self, ctx, group: modules.utility.GroupStr, role: str = None):
+        """
+        Changes the role requirement for the specified group to newRole.
+        The role requirement can be reset to None by typing 'reset' instead of a role name.
+        """
+        await sr.group.group_change_role_req(self, ctx, group, role)
+
+    @selfrole.command(name="max")
+    async def srMax(self, ctx, group: modules.utility.GroupStr, new_max: modules.utility.MaxRoleStr = None):
+        """
+        Limits the number of roles a user can select from this group.
+        Limit can be removed by setting new_max to 'all', 'reset', or the number 0.
+        """
+        await sr.group.group_change_max(self, ctx, group, new_max)
+
+    @selfrole.command(name="reset")
+    async def srReset(self, ctx, group: modules.utility.GroupStr):
+        """
+        Resets the group to default values.
+        (No roles, no role requirement, unlimited max, doesn't change role name)
+        """
+        await sr.group.group_reset(self, ctx, group)
 
 
 def setup(bot):

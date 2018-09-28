@@ -7,12 +7,6 @@ import modules.selfrole.message
 import modules.selfrole.find
 
 
-group_modify_cmd = """
-@commands.command()
-
-"""
-
-
 # ----------------------------------------------------------------------------------------------------------------------
 # Commands to add/remove groups
 
@@ -31,8 +25,8 @@ async def groupCreate(admin_cog, ctx, name: str, display_output=True):
     required_role = ""
     max_selectable = 'all'
 
-    if name == '*':
-        raise commands.CommandInvokeError(":x: ERROR: Name ***** is reserved.")
+    if name in ['*', 'reset']:
+        raise commands.CommandInvokeError(":x: ERROR: Name **{}** is reserved.".format(name))
     if type(max_selectable) == int and max_selectable <= 0:
         max_selectable = 'all'
     selfrole_list = ctx.tree.find('selfroles')
@@ -70,7 +64,7 @@ async def groupCreate(admin_cog, ctx, name: str, display_output=True):
         if ' ' in name:
             await ctx.send("<:cirnoWow:489185064224161793> Looks like this group has a space in its name! "
                            "To use/modify groups that contain spaces, surround the name in quotes.\n"
-                           "Ex: c!selfrole \"sample group\" reset")
+                           "Ex: c!selfrole reset \"sample group\"")
 
 
 async def groupDelete(admin_cog, ctx, name: str, display_output=True, skip_verification=False):
@@ -117,14 +111,12 @@ async def groupDelete(admin_cog, ctx, name: str, display_output=True, skip_verif
 # Other than add/delete, these commands all assume ctx.tree has already been defined
 
 
-async def role_add(admin_cog, ctx, group: ET.Element, emoji_str: str, *role_args):
+async def role_add(admin_cog, ctx, group: ET.Element, emoji: modules.utility.AllEmoji, role: discord.Role):
     """
     Adds a role and associates it with an emoji.
     Roles must be placed in a group. See 'c!selfrole group add' for more details.
     Will automatically update role assignment message, if one exists.
     """
-    role = await modules.utility.arg_to_role(ctx, role_args)
-    emoji = await modules.utility.AllEmoji().convert(ctx, emoji_str)
 
     # Check if emoji is bound to role in this group
     for assoc in group.findall('assoc'):
@@ -144,29 +136,29 @@ async def role_add(admin_cog, ctx, group: ET.Element, emoji_str: str, *role_args
     await ctx.send("Emoji {} successfully registered with role \"{}\"".format(emoji, role.name))
 
 
-async def role_del(admin_cog, ctx, group: ET.Element, *role_args):
+async def role_del(admin_cog, ctx, group: ET.Element, role: discord.Role):
     """
     Removes a role and its corresponding emoji.
     Will automatically update role assignment message, if one exists.
     """
-    role = await modules.utility.arg_to_role(ctx, role_args)
 
     # Check if emoji is bound to role in this group
     curr_assoc = None
-    group_containing_role = None
+    group_contains_role = False
     for a in group.findall('assoc'):
+        print(a.find('role').find('id').text)
         if a.find('role').find('id').text == str(role.id):
-            group_containing_role = group
+            group_contains_role = True
             curr_assoc = a
             break
-    if not group_containing_role:
+    if not group_contains_role:
         raise commands.CommandInvokeError("Error: could not find role \"{}\" in group **{}**.".format(
             role, group.find('name').text))
 
     old_emoji = await modules.utility.AllEmoji().convert(ctx, curr_assoc.find('emoji').text)
-    group_containing_role.remove(curr_assoc)
+    group.remove(curr_assoc)
     await modules.utility.write_xml(ctx)
-    await modules.selfrole.message.edit_selfrole_msg(admin_cog, ctx, group_containing_role, True, old_emoji, False)
+    await modules.selfrole.message.edit_selfrole_msg(admin_cog, ctx, group, True, old_emoji, False)
     await ctx.send("Role \"{}\" successfully removed; previously bound to emoji {}".format(role, old_emoji))
 
 
@@ -190,57 +182,51 @@ async def group_change_name(admin_cog, ctx, group: ET.Element, new_name: str):
     await ctx.send("**{}** has been renamed to **{}**".format(old_name, new_name))
 
 
-async def group_change_role_req(admin_cog, ctx, group: ET.Element, *role_args):
+async def group_change_role_req(admin_cog, ctx, group: ET.Element, new_role_str: str):
     """
     Changes the role requirement for the specified group to newRole.
     """
     old_role_name = group.find('req_role').text
 
-    if len(role_args) == 0:
+    if not new_role_str:
         await ctx.send('Current role requirement to use group **{}**: "{}"'.format(
             group.find('name').text, group.find('req_role').text))
-        return
-    elif role_args[0].lower() == "reset":
+    elif new_role_str == "reset":
         group.find('req_role').text = ""
         await modules.utility.write_xml(ctx)
         await ctx.send("**{}**'s role requirement has been reset (was {})".format(
             group.find('name').text, old_role_name))
-        return
+    else:
+        if old_role_name == new_role_str:
+            raise commands.BadArgument("New required role is the same as the old required role")
 
-    new_role = await modules.utility.arg_to_role(ctx, role_args)
-    if old_role_name == new_role.name:
-        raise commands.BadArgument("New required role is the same as the old required role")
+        new_role = commands.RoleConverter().convert(new_role_str)
 
-    group.find('req_role').text = str(new_role)
-    await modules.utility.write_xml(ctx)
-    await modules.selfrole.message.edit_selfrole_msg(admin_cog, ctx, group, False)
-    await ctx.send("**{}**'s required role has been changed from \"{}\" to \"{}\"".format(
-        group.find('name').text, old_role_name, new_role.name))
+        group.find('req_role').text = str(new_role)
+        await modules.utility.write_xml(ctx)
+        await modules.selfrole.message.edit_selfrole_msg(admin_cog, ctx, group, False)
+        await ctx.send("**{}**'s required role has been changed from \"{}\" to \"{}\"".format(
+            group.find('name').text, old_role_name, new_role_str))
 
 
-async def group_change_max(admin_cog, ctx, group: ET.Element, new_max=None):
+async def group_change_max(admin_cog, ctx, group: ET.Element, new_max: modules.utility.MaxRoleStr):
     old_max = group.find('max').text
 
     if new_max is None:
         await ctx.send('Current limit for group **{}**: {}'.format(
             group.find('name').text, 'Unlimited' if old_max == 'all' else old_max))
-        return
-
-    if new_max == "reset":
+    elif new_max == "reset":
         group.find('max').text = "all"
         await modules.utility.write_xml(ctx)
         await modules.selfrole.message.edit_selfrole_msg(admin_cog, ctx, group, False)
         await ctx.send("**{}**'s role limit has been reset to \"all\" (was {})".format(
             group.find('name').text, old_max))
-        return
-
     else:
-        new_max = await modules.utility.MaxRoleStr().convert(ctx, new_max)
-    group.find('max').text = str(new_max)
-    await modules.utility.write_xml(ctx)
-    await modules.selfrole.message.edit_selfrole_msg(admin_cog, ctx, group, False)
-    await ctx.send('**{}**\'s max roles assignable has been changed from "{}" to "{}"'.format(
-        group.find('name').text, old_max, new_max))
+        group.find('max').text = str(new_max)
+        await modules.utility.write_xml(ctx)
+        await modules.selfrole.message.edit_selfrole_msg(admin_cog, ctx, group, False)
+        await ctx.send('**{}**\'s max roles assignable has been changed from "{}" to "{}"'.format(
+            group.find('name').text, old_max, new_max))
 
 
 async def group_reset(admin_cog, ctx, group: ET.Element):
@@ -260,14 +246,3 @@ async def group_reset(admin_cog, ctx, group: ET.Element):
     await groupDelete(admin_cog, ctx, g_name, False, skip_verification=True)
     await groupCreate(admin_cog, ctx, g_name, False)
     await ctx.send("**{}** has been reset to default settings".format(group.find('name').text))
-
-
-# These lines should be at the end of the file
-cmd_dict = {'add': role_add,
-            'del': role_del,
-            'rename': group_change_name,
-            'max': group_change_max,
-            'req': group_change_role_req,
-            'color': None,
-            'reset': group_reset}
-cmd_list = cmd_dict.keys()

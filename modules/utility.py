@@ -1,11 +1,12 @@
 # Small utility functions that are refactored from the main cogs
 
-import xml.etree.ElementTree as ET
+#import xml.etree.ElementTree as ET
 import discord
 from discord.ext import commands
 import emoji
 import html
 import re
+import modules.selfrole.find
 
 def emoji_regional_update():
     '''Adds regional letters to emoji for discord-compatability checking'''
@@ -85,6 +86,23 @@ class MaxRoleStr(commands.Converter):
         if argument == "all":
             return "all"
         raise commands.BadArgument('Accepted values are integers >= 0 or the string "all".')
+
+
+class GroupStr(commands.Converter):
+    """
+    Used to convert a group in string format to an ET.Element.
+    """
+    async def convert(self, ctx, argument):
+        selfroles = ctx.tree.find('selfroles')
+        associations = selfroles.find('associations')
+        groups_list = associations.findall('group')
+
+        group = modules.selfrole.find.find_group(groups_list, argument)
+
+        if group is None:
+            raise commands.BadArgument("Group **{}** does not exist.".format(argument))
+
+        return group
 
 
 async def write_xml(ctx):
