@@ -6,35 +6,76 @@ import xml.etree.ElementTree as ET
 import html
 import discord
 from discord.ext import commands
-import modules.utility
 import modules.selfrole as sr
 import modules.selfrole.message
+from modules import utility
 
 class AutomationsCog():
     def __init__(self, bot):
         self.bot = bot
 
+
+    async def on_member_join(self, member):
+        tree = await utility.load_tree_id(member.guild.id)
+
+        # ----- Greeting Message ----- #
+        xml_greet = tree.find('greet')
+
+        if await utility.check_greet(xml_greet):
+            if xml_greet.find('userauth_dependence').text == 'disabled':
+                channel_id = xml_greet.find('channel').find('id').text
+
+                channel = discord.utils.get(member.guild.text_channels,
+                    id=int(channel_id))
+
+                xml_embed = xml_greet.find('embed')
+
+                embed = await utility.make_simple_embed(
+                    xml_embed.find('title').text,
+                    xml_embed.find('desc'))
+
+                await channel.send(
+                    content=xml_greet.find('message').findtext('content').format(MENTION=member.mention),
+                    embed=embed)
+
+
     async def on_raw_reaction_add(self, payload):
         if payload.user_id == self.bot.user.id:
             return # The bot shouldn't listen to itself
 
-        tree = ET.parse('server_data/{}/config.xml'.format(payload.guild_id))
+        tree = await utility.load_tree_id(payload.guild_id)
 
-        # Userauth
-        try:
-            userauth = tree.find('userauth')
+        # ----- Userauth ----- #
+        userauth = tree.find('userauth')
+        guild = self.bot.get_guild(payload.guild_id)
+        role = discord.utils.get(guild.roles,
+                                 id=int(userauth.find('role').find('id').text))
 
-            if userauth.find('status').text == 'enabled':
-                if payload.message_id == int(userauth.find('message').find('id').text):
-                    if str(payload.emoji) == html.unescape(userauth.find('emoji').find('id').text):
-                        guild = self.bot.get_guild(payload.guild_id)
-                        role = discord.utils.get(guild.roles,
-                                                 id=int(userauth.find('role').find('id').text))
-                        if role:
-                            await guild.get_member(payload.user_id).add_roles(role)
+        if role:
+            if payload.message_id == int(userauth.find('embed').find('id').text):
+                if str(payload.emoji) == html.unescape(userauth.find('emoji').find('id').text):
+                    member = guild.get_member(payload.user_id)
 
-        except TypeError:
-            pass
+                    if role not in member.roles:
+                        await member.add_roles(role)
+
+                        # ----- Greeting for Userauth ----- #
+                        xml_greet = tree.find('greet')
+                        if await utility.check_greet(xml_greet):
+                            if xml_greet.find('userauth_dependence').text == 'enabled':
+                                channel_id = xml_greet.find('channel').find('id').text
+
+                                channel = discord.utils.get(self.bot.get_guild(payload.guild_id).text_channels,
+                                    id=int(channel_id))
+                                xml_message = xml_greet.find('embed')
+                                embed = await utility.make_simple_embed(
+                                    xml_message.find('title').text,
+                                    xml_message.find('desc').text)
+
+                                await channel.send(
+                                    content=xml_greet.find('message').findtext('content').format(
+                                        MENTION=self.bot.get_user(payload.user_id).mention),
+                                    embed=embed)
 
         # Automated user self-roles
         selfrole_list = tree.find('selfroles')
@@ -121,7 +162,7 @@ class AutomationsCog():
         """
         tree, assoc, group = self._find_role_assoc(before)
         if assoc:
-            emoji = await modules.utility.AllEmoji().convert(None, assoc.find('emoji').text)
+            emoji = await utility.AllEmoji().convert(None, assoc.find('emoji').text)
             group.remove(assoc)
             tree.write('server_data/{}/config.xml'.format(str(before.guild.id)))
             await sr.message.edit_selfrole_msg(self, before.guild, group, True, emoji, False)
@@ -146,12 +187,6 @@ class AutomationsCog():
         :return: The list of ids of messages
         """
         return list(map(int, msg_id_text.strip().split()))
-
-    '''
-    async def on_message(self, message):
-        await self.bot.process_commands(message)
-        tree = ET.parse('server_data/{}/config.xml'.format(message.guild.id))
-    '''
 
 
 def setup(bot):

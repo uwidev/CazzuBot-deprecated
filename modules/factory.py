@@ -9,111 +9,168 @@ import html
 import discord
 from modules.utility import AllEmoji
 
-USERAUTH_DEFAULT_MESSAGE = ("It says here that you need to press that "
+USERAUTH_DEFAULT_TITLE = 'Hallo there! Welcones to the server!'
+USERAUTH_DEFAULT_DESC = ("It says here that you need to press that "
     "button down there to gain access to the server.")
 USERAUTH_DEFAULT_EMOJI = html.unescape('&#128077;')
 
-class WorkerUserAuth():
-    msg = USERAUTH_DEFAULT_MESSAGE
-    emo = USERAUTH_DEFAULT_EMOJI
-    # default_greet_message = ("Oh look, a new user\nWelcome to the server {MENTION}. "
-    #                          "Hope you have a nice time on here, or something.")
+GREET_DEFAULT_TITLE = "Oh look, a new user"
+GREET_DEFAULT_DESC = ("Welcome to the server. "
+                         "Have a nice time here, or something.")
 
+def find_branch(root, arg: str):
+    return root.find(arg) if root.find(arg) else ET.SubElement(root, arg)
+
+class WorkerServer():
     def __init__(self, root):
-        self.root = root
+        self.server = find_branch(root, 'server')
+
+
+    async def clear(self):
+        self.server.clear()
+
 
     async def create_all(self):
-        await self.create_status()
+        await self.create_admin()
+        await self.create_mod()
+
+    async def create_admin(self):
+        admin = ET.SubElement(self.server, 'admin')
+        ET.SubElement(admin, 'id')
+
+    async def create_mod(self):
+        mod = ET.SubElement(self.server, 'mod')
+        ET.SubElement(mod, 'id')
+
+
+class WorkerUserAuth():
+    title = USERAUTH_DEFAULT_TITLE
+    desc = USERAUTH_DEFAULT_DESC
+    emo = USERAUTH_DEFAULT_EMOJI
+
+    def __init__(self, root):
+        self.userauth = find_branch(root, 'userauth')
+
+    async def clear(self):
+        self.userauth.clear()
+
+    async def create_all(self):
+        # await self.create_feature()
         await self.create_role()
-        await self.create_message()
+        await self.create_embed()
         await self.create_emoji()
 
-    async def create_status(self):
-        ET.SubElement(self.root, 'status').text = 'disabled'
+    async def create_feature(self):
+        ET.SubElement(self.userauth, 'feature').text = 'off'
 
     async def create_role(self):
-        auth_role = ET.SubElement(self.root, 'role')
+        auth_role = ET.SubElement(self.userauth, 'role')
         ET.SubElement(auth_role, 'id')
         ET.SubElement(auth_role, 'name')
 
-    async def create_message(self):
-        auth_message = ET.SubElement(self.root, 'message')
-        ET.SubElement(auth_message, 'id')
-        ET.SubElement(auth_message, 'content').text = self.msg
+    async def create_embed(self):
+        auth_embed = ET.SubElement(self.userauth, 'embed')
+        ET.SubElement(auth_embed, 'id')
+        ET.SubElement(auth_embed, 'title').text = self.title
+        ET.SubElement(auth_embed, 'desc').text = self.desc
 
     async def create_emoji(self):
-        auth_emoji = ET.SubElement(self.root, 'emoji')
+        auth_emoji = ET.SubElement(self.userauth, 'emoji')
         ET.SubElement(auth_emoji, 'id').text = self.emo
 
-    # async def create_greet(self):
-    #     auth_greet = ET.SubElement(self.root, 'greet')
-    #     ET.SubElement(auth_greet, 'status').text = 'disabled'
-    #
-    #     auth_greet_message = ET.SubElement(auth_greet, 'message')
-    #     ET.SubElement(auth_greet_message, 'content').text = workon_userauth.default_greet_message
-    #
-    #     auth_greet_channel = ET.SubElement(auth_greet, 'channel')
-    #     ET.SubElement(auth_greet_channel, 'id')
-    #     ET.SubElement(auth_greet_channel, 'name')
-
-    # Reset
 
     async def reset_all(self):
-        await self.reset_status()
+        # await self.reset_feature()
         await self.reset_role()
-        await self.reset_message()
+        await self.reset_embed()
         await self.reset_emoji()
 
-    async def reset_status(self):
-        self.root.find('status').text = 'disabled'
+    async def reset_feature(self):
+        self.userauth.find('feature').text = 'off'
 
     async def reset_role(self):
-        xml_role = self.root.find('role')
+        xml_role = self.userauth.find('role')
         xml_role.find('id').text = xml_role.find('name').text = None
 
-    async def reset_message(self):
-        xml_message = self.root.find('message')
-        xml_message.find('content').text = self.msg
+    async def reset_embed(self):
+        xml_embed = self.userauth.find('embed')
+        xml_embed.find('title').text = self.title
+        xml_embed.find('desc').text = self.desc
 
     async def reset_emoji(self):
-        self.root.find('emoji').find('id').text = self.emo
-    #
-    # async def greet(self):
-    #     xml_greet = userauth.find('greet')
-    #     xml_greet.find('status').text = 'disabled'
-    #     xml_greet.find('message').find('content').text = workon_userauth.default_greet_message
-    #
-    #     xml_greet_channel = xml_greet.find('channel')
-    #     xml_greet_channel.find('id').text = None
-    #     xml_greet_channel.find('name').text = None
+        self.userauth.find('emoji').find('id').text = self.emo
+
 
 class WorkerGreet():
-    default_message = ("Oh look, a new user\nWelcome to the server {MENTION}. "
-                             "Hope you have a nice time on here, or something.")
+    title = GREET_DEFAULT_TITLE
+    desc = GREET_DEFAULT_DESC
+
+
+    def __init__(self, root):
+        self.greet = find_branch(root, 'greet')
+
+
+    async def clear(self):
+        self.greet.clear()
+
 
     async def create_all(self):
-        self.create_message()
-        self.create_channel()
+        await self.create_feature()
+        await self.create_message()
+        await self.create_embed()
+        await self.create_channel()
+        await self.create_userauth_dependence()
 
+    async def create_feature(self):
+        ET.SubElement(self.greet, 'feature').text = 'off'
 
     async def create_message(self):
-        pass
+        xml_message = ET.SubElement(self.greet, 'message')
+        ET.SubElement(xml_message, 'content')
 
+    async def create_embed(self):
+        xml_embed = ET.SubElement(self.greet, 'embed')
+        ET.SubElement(xml_embed, 'title').text = self.title
+        ET.SubElement(xml_embed, 'desc').text = self.desc
 
     async def create_channel(self):
-        pass
+        xml_channel = ET.SubElement(self.greet, 'channel')
+        ET.SubElement(xml_channel, 'id')
+
+    async def create_userauth_dependence(self):
+        ET.SubElement(self.greet, 'userauth_dependence').text = 'disabled'
+
 
     async def reset_all(self):
-        self.reset_message()
-        self.reset_channel()
+        await self.reset_feature()
+        await self.reset_message()
+        await self.reset_embed()
+        await self.reset_channel()
+        await self.reset_userauth_dependence()
 
+    async def reset_feature(self):
+        self.greet.find('feature').text = 'off'
 
     async def reset_message(self):
-        pass
+        self.greet.find('message').find('content').text = None
 
+    async def reset_embed(self):
+        xml_embed = self.greet.find('embed')
+        xml_embed.find('title').text = self.title
+        xml_embed.find('desc').text = self.desc
 
     async def reset_channel(self):
-        pass
+
+        self.greet.find('channel').find('id').text = None
+
+    async def reset_userauth_dependence(self):
+        self.greet.find('userauth_dependence').text = 'disabled'
+
+
+async def create_all(root):
+    await WorkerServer(root).create_all()
+    await WorkerUserAuth(root).create_all()
+    await WorkerGreet(root).create_all()
 
 
 class WorkerSelfrole:

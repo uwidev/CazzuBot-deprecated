@@ -1,10 +1,9 @@
-import discord, os, traceback, sys
+import discord, traceback, sys
 from discord.ext import commands
 import xml.etree.ElementTree as ET
 from asyncio import sleep
 from discord import Emoji
-import modules.utility as utility
-import modules.factory as factory
+from modules import factory, utility
 import modules.exceptxml
 import html
 import modules.selfrole as sr
@@ -27,14 +26,29 @@ print('ending test')
 
 
 class AdminCog():
-
     def __init__(self, bot):
         self.bot = bot
 
     async def __local_check(self, ctx):
-        return ctx.guild is not None and \
-        (ctx.author.guild_permissions.administrator or \
-        ctx.author.id == self.bot.owner_id)
+        tree = await utility.load_tree(ctx)
+
+        if ctx.author == ctx.guild.owner:
+            return True
+
+        if ctx.guild is not None:
+            try:
+                admin = await commands.RoleConverter().convert(
+                    ctx, tree.find('server').find('admin').find('id').text)
+                if admin in ctx.author.roles:
+                    return True
+
+            except TypeError:
+                pass
+
+            if ctx.author.id == self.bot.owner_id:
+                return True
+
+        return False
 
 
     async def __error(self, ctx, error):
@@ -63,77 +77,25 @@ class AdminCog():
         traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 
 
-    @commands.command()
-    @commands.cooldown(1, 5, commands.BucketType.guild)
-    async def init(self, ctx):
-        '''Initializes the server configs based on modules.factory properties'''
-        if not os.path.isdir('server_data/{}'.format(ctx.guild.id)):
-            os.makedirs('server_data/{}'.format(str(ctx.guild.id)))
-
-        root = ET.Element('data')
-
-        userauth = ET.SubElement(root, 'userauth')
-        await factory.WorkerUserAuth(userauth).create_all()
-
-        selfroles = ET.SubElement(root, 'selfroles')
-        await factory.WorkerSelfrole(selfroles).create_all()
-
-        ctx.tree = ET.ElementTree(root)
-
-        await modules.utility.write_xml(ctx)
-        await ctx.send(':thumbsup: **{}** (`{}`) server config have been initialized.'.format(ctx.guild.name, ctx.guild.id))
-
-
-    @init.before_invoke
-    async def init_verify(self, ctx):
-        '''Asks the user before initializing server configs'''
-        def verification(m):
-            return m.author == ctx.author and m.content.lower() in ['yes', 'no']
-
-        await ctx.send(':exclamation: Are you sure you want to initialize server configs? [`Yes`/`No`]')
-        reply = await self.bot.wait_for('message', check=verification, timeout = 5)
-
-        if reply.content.lower() == 'no':
-            raise commands.CommandInvokeError(':octagonal_sign: Initialization has been cancelled.')
-
-
     @commands.group(name='userauth')
     @commands.cooldown(1, 2, commands.BucketType.guild)
     async def userauth(self, ctx):
-        '''Manages user authentication.
-
-        Admins can either set, reset, or make.
-        Also makes the tree and root, which is used in subcommands.
-        '''
-        ctx.tree = ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+        '''Manages user authentication.'''
+        ctx.tree = await utility.load_tree(ctx)
         ctx.userauth = ctx.tree.find('userauth')
 
         if ctx.invoked_subcommand is None:
             base_embed = await modules.utility.make_simple_embed(
-                                                'Current configs for userauth',
-                                                await modules.utility.userauth_to_str(ctx))
-
-
-            xml_message_content = ctx.userauth.find('message').find('content').text
-            # msg_embed = await modules.utility.make_userauth_embed(xml_message_content)
+                'Current configs for userauth',
+                await modules.utility.userauth_to_str(ctx))
 
             await ctx.send(embed=base_embed)
-            # await ctx.send(content='Below is what your current userauth looks like to users', embed=msg_embed)
 
 
     @userauth.group(name='set')
     async def userauth_set(self, ctx):
         '''Command group based userauth. Splits into below'''
         pass
-
-
-    @userauth_set.command(name='status')
-    async def userauth_set_status(self, ctx, status:utility.StatusStr):
-        ctx.userauth.find('status').text = status
-
-        await modules.utility.write_xml(ctx)
-
-        await ctx.send(':thumbsup: User Authentication is now {sta}.'.format(sta=status))
 
 
     @userauth_set.command(name='role')
@@ -145,8 +107,8 @@ class AdminCog():
 
         await modules.utility.write_xml(ctx)
 
-        await ctx.send(':thumbsup: Role: **{}** has been saved.'\
-                        .format(role.name))
+        await ctx.send(':thumbsup: Role: **{rl}** has been saved.'\
+                        .format(rl=role.name))
 
 
     @userauth_set.command(name='emoji')
@@ -157,40 +119,44 @@ class AdminCog():
 
         await modules.utility.write_xml(ctx)
 
-        xml_message_id = ctx.userauth.find('message').find('id').text
+        xml_message_id = ctx.userauth.find('embed').find('id').text
         if xml_message_id is not None:
             try:
                 msg = await ctx.get_message(int(xml_message_id))
                 await msg.clear_reactions()
-                await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji_id))
+                await msg.add_reaction(emo)
             except (discord.NotFound, TypeError):
                 pass
 
-        await ctx.send(':thumbsup: Emoji: **{}** has been saved and message (if exists) has been updated.'\
-                        .format(emo))
+        await ctx.send(
+            ':thumbsup: Emoji: **{}** has been saved and message (if exists) has been updated.'.format(emo))
 
 
-    @userauth_set.command(name='message')
-    async def userauth_set_message(self, ctx, *, msg:str):
-        '''Takes a message, edits existing, write to xml'''
-        xml_message = ctx.userauth.find('message')
-        xml_message_content = xml_message.find('content').text = msg
+    @userauth_set.command(name='desc')
+    async def userauth_set_message(self, ctx, *, desc):
+        '''Takes a description, edits existing, write to xml'''
+        xml_embed = ctx.userauth.find('embed')
+        xml_embed.find('desc').text = desc
 
         await modules.utility.write_xml(ctx)
 
-        await utility.edit_userauth(ctx, msg)
+        await utility.edit_userauth(ctx, xml_embed.find('title').text, desc)
+
+        await ctx.send(
+            ':thumbsup: Embed Description has been saved and message (if exists) has been updated.')
+
+
+    @userauth_set.command(name='title')
+    async def userauth_set_title(self, ctx, *, title):
+        '''Takes a title, edits existing, write to xml'''
+        xml_embed = ctx.userauth.find('embed')
+        xml_embed.find('title').text = title
+
+        await modules.utility.write_xml(ctx)
+
+        await utility.edit_userauth(ctx, title, xml_embed.find('desc').text)
 
         await ctx.send(content=':thumbsup: Message has been saved and message (if exists) has been updated.')
-
-
-    # @userauth_set.group(name='greet')
-    # async def userauth_set_greet(self, ctx, status:modules.utility.StatusStr):
-    #     '''Takes a StatusStr, writes to xml'''
-    #     ctx.userauth.find('greet').find('status').text = status
-    #
-    #     await modules.utility.write_xml(ctx)
-    #
-    #     await ctx.send(content=(':thumbsup: userauth is now {0}.'.format(status)))
 
 
     @userauth.command(name='make')
@@ -198,11 +164,14 @@ class AdminCog():
     async def userauth_make(self, ctx):
         '''Deletes old userauth and creates a message based from configs for userauth'''
         await utility.delete_userauth(ctx)
-        xml_message = ctx.userauth.find('message')
-        msg_embed = await modules.utility.make_userauth_embed(xml_message.find('content').text)
-        msg = await ctx.send(embed=msg_embed)
+        xml_embed = ctx.userauth.find('embed')
+        embed = await modules.utility.make_userauth_embed(
+            xml_embed.find('title').text,
+            xml_embed.find('desc').text)
 
-        xml_message.find('id').text = str(msg.id)
+        msg = await ctx.send(embed=embed)
+
+        xml_embed.find('id').text = str(msg.id)
 
         await modules.utility.write_xml(ctx)
 
@@ -210,15 +179,15 @@ class AdminCog():
         await msg.add_reaction(await modules.utility.AllEmoji().convert(ctx, xml_emoji.find('id').text))
 
 
-    @userauth.group(name='reset')
+    @userauth.group(name='reset',
+                    invoke_without_subcommand=True)
     async def userauth_reset(self, ctx):
         '''With no subommands passed, reset all of userath's configs, deletes old userauth'''
-        if ctx.subcommand_passed == 'reset':
-            await utility.delete_userauth(ctx)
-            await factory.WorkerUserAuth(ctx.userauth).reset_all()
-            await modules.utility.write_xml(ctx)
+        await utility.delete_userauth(ctx)
+        await factory.WorkerUserAuth(ctx.userauth).reset_all()
+        await modules.utility.write_xml(ctx)
 
-            await ctx.send(':thumbsup: userauth has been reset to defaults.')
+        await ctx.send(':thumbsup: userauth has been reset to defaults.')
 
 
     @userauth_reset.command(name='role')
@@ -242,12 +211,107 @@ class AdminCog():
     @userauth_reset.command(name='message')
     async def userauth_reset_message(self, ctx):
         '''Resets userauth:message configs, edits existing userauth'''
-        await utility.edit_userauth(ctx, factory.USERAUTH_DEFAULT_MESSAGE)
+        await utility.edit_userauth(
+            ctx,
+            factory.USERAUTH_DEFAULT_TITLE,
+            factory.USERAUTH_DEFAULT_DESC)
 
-        await factory.WorkerUserAuth(ctx.userauth).reset_message()
+        await factory.WorkerUserAuth(ctx.userauth).reset_embed()
         await modules.utility.write_xml(ctx)
 
-        await ctx.send(':thumbsup: Configs userauth:message has been reset to defaults')
+        await ctx.send(':thumbsup: Configs for the User Authenticaton'
+            ' message has been reset to defaults.')
+
+
+    @commands.group(name='greet',
+                    aliases=['greeting'])
+    async def greet(self, ctx):
+        ctx.tree = await utility.load_tree(ctx)
+        ctx.greet = ctx.tree.find('greet')
+
+        if ctx.invoked_subcommand is None:
+            embed = await utility.make_simple_embed(
+                'Current settings for greet',
+                await utility.greet_to_str(ctx))
+
+            await ctx.send(embed=embed)
+
+
+    @greet.group(name='set')
+    async def greet_set(self, ctx):
+        pass
+
+    @greet_set.command(name='feature')
+    async def greet_set_feature(self, ctx, arg: utility.StatusStr):
+        ctx.greet.find('feature').text = arg[1]
+
+        await utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: Greetings are now **{a}**.'.format(a=arg[0]))
+
+    @greet_set.command(name='message')
+    async def greet_set_message(self, ctx, *, msg):
+        ctx.greet.find('message').find('content').text = msg
+
+        await utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: Message has been set to **``{m}``**.'.format(m=msg))
+
+    @greet_set.command(name='channel')
+    async def greet_set_channel(self, ctx, channel: discord.TextChannel):
+        xml_channel = ctx.greet.find('channel')
+        xml_channel.find('id').text = str(channel.id)
+
+        await utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: Greetings will now show up on {ch}.'.format(ch=channel.mention))
+
+
+    @greet_set.command(name='userauth')
+    async def greet_set_userauth(self, ctx, arg: utility.StatusStr):
+        ctx.greet.find('userauth_dependence').text = arg[0]
+
+        await utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: Userauth dependency for greetings are now **{bo}**.'.format(bo=arg[0]))
+
+
+    @greet_set.command(name='title')
+    async def greet_set_title(self, ctx, *, title: str):
+        ctx.greet.find('embed').find('title').text = title
+
+        await utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: Greeting title has been saved.')
+
+
+    @greet_set.command(name='desc')
+    async def greet_set_desc(self, ctx, *, desc: str):
+        ctx.greet.find('embed').find('desc').text = desc
+
+        await utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: Greeting description has been saved.')
+
+
+    @greet.group(name='reset',
+                 invoke_without_subcommand=True)
+    async def greet_reset(self, ctx):
+        #print(ctx.greet.find('embed').find('desc').text)
+        await factory.WorkerGreet(ctx.tree.getroot()).reset_all()
+
+        await utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: Configs for greetings has been reset to defaults.')
+
+
+    @greet_reset.command(name='embed')
+    async def greet_reset_embed(self, ctx):
+        await factory.WorkerGreet(ctx.greet).reset_embed()
+
+        await utility.write_xml(ctx)
+
+        await ctx.send(':thumbsup: Configs greetings embed have been reset to defaults.')
 
 
     @commands.group(name="selfrole", aliases=['sr'])
@@ -316,6 +380,7 @@ class AdminCog():
         await ctx.send("Invalid command usage <:cirnoBaka:489185059732193298>\n" +
                        "Use \"c!help selfrole role\" for a list of valid commands")
 
+
     @selfrole_message_manage.command(name='make', aliases=['m', 'c'])
     async def selfrole_msg_create(self, ctx, group: str = "*", target_channel: discord.TextChannel = None, suppress_output = 'default'):
         """
@@ -335,6 +400,7 @@ class AdminCog():
             await sr.message.build_message(self, ctx, group, suppress_output, target_channel)
         else:
             await sr.message.build_message(self, ctx, group, suppress_output)
+
 
     @selfrole_message_manage.command(name='destroy', aliases=['d'])
     async def selfrole_msg_destroy(self, ctx, group: str = "*", suppress_output = 'default'):
@@ -449,6 +515,18 @@ class AdminCog():
         (No roles, no role requirement, unlimited max, doesn't change role name)
         """
         await sr.group.group_reset(self, ctx, group)
+
+
+    @commands.command(name='embed')
+    async def embed(self, ctx, *, titledesc):
+        try:
+            title, desc = titledesc.split('|')
+        except ValueError:
+            raise commands.BadArgument('Command requires ``|` to divide the title and description.')
+        embed = await utility.make_simple_embed(title, desc)
+        await ctx.send(embed=embed)
+        await ctx.message.delete()
+
 
 
 def setup(bot):

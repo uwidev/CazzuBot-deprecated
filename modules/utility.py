@@ -1,6 +1,6 @@
 # Small utility functions that are refactored from the main cogs
 
-#import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET
 import discord
 from discord.ext import commands
 import emoji
@@ -44,7 +44,7 @@ def emoji_regional_update():
 
 # Userful Converters
 class AllEmoji(commands.EmojiConverter):
-    '''Converts both toa custom or discord-compatable unicode emoji'''
+    '''Converts both to a custom or discord-compatable unicode emoji'''
     async def convert(self, ctx, argument):
         if await is_custom_emoji(argument):
             return await super().convert(ctx, argument)
@@ -62,10 +62,10 @@ class StatusStr(commands.Converter):
 
     async def convert(self, ctx, argument):
         if re.match(self.pos, argument.lower()):
-            return 'enabled'
+            return ('enabled', 'on')
         if re.match(self.neg, argument.lower()):
-            return 'disabled'
-        raise commands.BadArgument('Accepted values are "enabled" or "disabled".')
+            return ('disabled', 'off')
+        raise commands.BadArgument('Accepted values are "enabled (on)" or "disabled (off)".')
 
 
 class MaxRoleStr(commands.Converter):
@@ -105,12 +105,37 @@ class GroupStr(commands.Converter):
         return group
 
 
+class BoolStr(commands.Converter):
+    '''
+    Mainly used to check to see if taken str is enabled or disabled.
+    Also needs to be more flexible in accepted paramaters.
+    '''
+    def __init__(self):
+        self.pos = re.compile(r'^(true?)$')
+        self.neg = re.compile(r'^(false?)$')
+
+    async def convert(self, ctx, argument):
+        if re.match(self.pos, argument.lower()):
+            return 'true'
+        if re.match(self.neg, argument.lower()):
+            return 'false'
+        raise commands.BadArgument('Accepted values are "true" or "false".')
+
+
+async def load_tree(ctx):
+    return ET.parse('server_data/{}/config.xml'.format(ctx.guild.id))
+
+async def load_tree_id(id):
+    return ET.parse('server_data/{}/config.xml'.format(id))
+
 async def write_xml(ctx):
     ctx.tree.write('server_data/{}/config.xml'.format(str(ctx.guild.id)))
 
 
-def check_userauth_role_set(ctx):
+async def check_userauth_role_set(ctx):
     '''A check to see if userauth role is set'''
+    if not ctx.invoked_subcommand:
+        return True
     role = ctx.userauth.find('role')
     return False if role.find('id').text is None else True
 
@@ -122,43 +147,36 @@ async def is_custom_emoji(argument):
     return True
 
 
-async def make_userauth_embed(msg:str):
-    '''Creates and returns the embed for useruath'''
-    embed = discord.Embed(
-                        title='Hallo there! Welcones to the server!',
-                        description=html.unescape(msg),
-                        color=0x9edbf7)
-
-    #embed.set_author(name='Cirno', icon_url='https://i.imgur.com/sFG6Oty.png')
-    embed.set_footer(text='-sarono', icon_url='https://i.imgur.com/BAj8IWu.png')
-    embed.set_thumbnail(url='https://i.imgur.com/RY1IgDX.png')
-
-    return embed
-
-
 async def delete_userauth(ctx):
     try:
         message_id = int(ctx.userauth.find('message').find('id').text)
         msg = await ctx.get_message(message_id)
         await msg.delete()
 
-    except (TypeError, discord.errors.NotFound):
+    except (TypeError, AttributeError, discord.errors.NotFound):
         pass
 
 
-async def edit_userauth(ctx, content:str):
-    msg_embed = await make_userauth_embed(content)
+async def edit_userauth(ctx, title, desc):
+    msg_embed = await make_userauth_embed(title, desc)
     xml_message = ctx.userauth.find('message')
 
     try:
         client_message = await ctx.get_message(int(xml_message.find('id').text))
         await client_message.edit(embed=msg_embed)
 
-    except (TypeError, discord.errors.NotFound):
+    except (TypeError, AttributeError, discord.errors.NotFound):
         pass
 
 
-async def make_simple_embed(title:str, desc:str):
+async def check_greet(xml_greet):
+    if xml_greet.find('feature').text == 'on':
+        if xml_greet.find('channel').find('id').text is not None:
+            return True
+    return False
+
+
+async def make_simple_embed(title: str, desc: str):
     '''Creates a simple discord.embed object and returns it'''
     embed = discord.Embed(
                         title=title,
@@ -170,24 +188,75 @@ async def make_simple_embed(title:str, desc:str):
     return embed
 
 
+async def make_userauth_embed(title: str, desc: str):
+    '''Creates and returns the embed for useruath'''
+    embed = discord.Embed(
+                        title=title,
+                        description=desc,
+                        color=0x9edbf7)
+
+    #embed.set_author(name='Cirno', icon_url='https://i.imgur.com/sFG6Oty.png')
+    embed.set_footer(text='-sarono', icon_url='https://i.imgur.com/BAj8IWu.png')
+    embed.set_thumbnail(url='https://i.imgur.com/RY1IgDX.png')
+
+    return embed
+
+
 async def userauth_to_str(ctx):
     '''Given the element of userauth as root, returns indented list as a str'''
-    root = ctx.userauth
+    userauth = ctx.userauth
     to_return = ''
 
-    to_return += '**Status:** {sta}'.format(sta=root.find('status').text.capitalize())
+    to_return += '**Role:** {na}'.format(na=userauth.find('role').find('name').text)
 
-    to_return += '**\nRole:** {na}'.format(na=root.find('role').find('name').text)
+    to_return += '\n**Emoji:** {emo}'.format(emo=userauth.find('emoji').find('id').text)
 
-    xml_emoji = root.find('emoji')
-    to_return += '\n**Emoji:** {emo}'.format(emo=xml_emoji.find('id').text)
+    to_return += '\n**Title:** {tl}'.format(tl=userauth.find('embed').find('title').text)
 
-    # xml_greet = root.find('greet')
-    # channel_id = xml_greet.find('channel').find('id')
-    # channel = await commands.TextChannelConverter().convert(ctx, channel_id) if channel_id else None
-    # to_return += '\n**greet-status:** {sta}\n**greet-channel:** {ch}'.format(
-    #     sta=xml_greet.find('status').text,
-    #     ch=channel)
+    to_return += '\n**Description:** {de}'.format(de=userauth.find('embed').find('desc').text)
+
+    return to_return
+
+
+async def greet_to_str(ctx):
+    greet = ctx.greet
+    to_return = ''
+
+    to_return += '**Feature:** {fe}'.format(fe=greet.find('feature').text)
+
+    to_return += '**\nUser Auth Dependence:** {ua}'.format(ua=greet.find('userauth_dependence').text)
+
+    channel = greet.find('channel').find('id').text
+    if channel is not None:
+        channel = await commands.TextChannelConverter().convert(ctx, channel)
+
+    to_return += '**\nChannel:** {ch}'.format(ch=channel)
+
+    to_return += '**\nMessage:** {ms}'.format(ms=greet.find('message').findtext('content'))
+
+    to_return += '**\nEmbed Title:** {ti}'.format(ti=greet.find('embed').find('title').text)
+
+    to_return += '**\nEmbed Description:** {de}'.format(de=greet.find('embed').find('desc').text)
+
+    return to_return
+
+
+async def server_to_str(ctx):
+    server = ctx.server
+    to_return = ''
+
+    admin = server.find('admin').find('id').text
+    mod = server.find('mod').find('id').text
+
+    if admin is not None:
+        admin = (await commands.RoleConverter().convert(ctx, admin)).name
+
+    if mod is not None:
+        mod = (await commands.RoleConverter().convert(ctx, mod)).name
+
+    to_return += '**Admins:** {ad}'.format(ad=admin)
+
+    to_return += '\n**Mods:** {md}'.format(md=mod)
 
     return to_return
 
