@@ -1,3 +1,6 @@
+# DEPRECATED
+Moved here: https://github.com/blongty/CazzuBot
+
 # CazzuBot for Club Cirno Discord Server
 Before you run the bot, make sure you create a file called **TOKEN_SECRET.py** at the root directory. Discord bot token can be found under your discord applications here: https://discordapp.com/developers/applications/me/
 
